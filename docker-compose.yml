@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai_demo_postgres
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-ai_demo}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai_net
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: ai_demo_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RMQ_PASSWORD:-guest}
+    ports:
+      - '5672:5672' # AMQP protocol port
+      - '15672:15672' # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - ai_net
+    restart: unless-stopped
+
+  # Note: Ollama doesn't run well entirely inside docker if you want to use GPU on standard Windows setups without WSL2 GPU passthrough.
+  # But for a backend base, we provide this containerized CPU-only version, or you can run native it.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_demo_ollama
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - ai_net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  ollama_data:
+
+networks:
+  ai_net:
+    driver: bridge

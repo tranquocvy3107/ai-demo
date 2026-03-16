@@ -1,0 +1,205 @@
+{
+    "message": "Research complete",
+    "threadId": "3fb0904a-297c-40e0-88da-bfa70f792479",
+    "stepsReceived": 5,
+    "data": [
+        {
+            "agent": {
+                "messages": [
+                    {
+                        "lc": 1,
+                        "type": "constructor",
+                        "id": [
+                            "langchain_core",
+                            "messages",
+                            "AIMessage"
+                        ],
+                        "kwargs": {
+                            "content": "",
+                            "additional_kwargs": {},
+                            "tool_calls": [
+                                {
+                                    "name": "test_connect_domain",
+                                    "args": {
+                                        "domain": "example.com"
+                                    },
+                                    "id": "1cb92071-769d-4972-81c7-9f0729e70c22",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "response_metadata": {
+                                "model_provider": "ollama",
+                                "model": "qwen2.5:7b",
+                                "created_at": "2026-03-15T09:23:58.206321323Z",
+                                "done": true,
+                                "done_reason": "stop",
+                                "total_duration": 66358410132,
+                                "load_duration": 24183098105,
+                                "prompt_eval_count": 453,
+                                "prompt_eval_duration": 38634908451,
+                                "eval_count": 22,
+                                "eval_duration": 3335855563
+                            },
+                            "usage_metadata": {
+                                "input_tokens": 453,
+                                "output_tokens": 22,
+                                "total_tokens": 475,
+                                "input_token_details": {},
+                                "output_token_details": {}
+                            },
+                            "invalid_tool_calls": []
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "tools": {
+                "messages": [
+                    {
+                        "lc": 1,
+                        "type": "constructor",
+                        "id": [
+                            "langchain_core",
+                            "messages",
+                            "ToolMessage"
+                        ],
+                        "kwargs": {
+                            "status": "success",
+                            "content": "Connection to example.com established successfully. HTTP status: 200.",
+                            "tool_call_id": "1cb92071-769d-4972-81c7-9f0729e70c22",
+                            "name": "test_connect_domain",
+                            "metadata": {
+                                "versions": {
+                                    "@langchain/core": "1.1.32"
+                                }
+                            },
+                            "additional_kwargs": {},
+                            "response_metadata": {}
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    {
+                        "lc": 1,
+                        "type": "constructor",
+                        "id": [
+                            "langchain_core",
+                            "messages",
+                            "AIMessage"
+                        ],
+                        "kwargs": {
+                            "content": "",
+                            "additional_kwargs": {},
+                            "tool_calls": [
+                                {
+                                    "name": "find_url_on_domain",
+                                    "args": {
+                                        "domain": "example.com",
+                                        "keyword": "affiliate"
+                                    },
+                                    "id": "0a56bdd5-da32-4284-a44a-b3a031179b77",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "response_metadata": {
+                                "model_provider": "ollama",
+                                "model": "qwen2.5:7b",
+                                "created_at": "2026-03-15T09:24:27.74368828Z",
+                                "done": true,
+                                "done_reason": "stop",
+                                "total_duration": 29446033216,
+                                "load_duration": 182272086,
+                                "prompt_eval_count": 346,
+                                "prompt_eval_duration": 25111003001,
+                                "eval_count": 29,
+                                "eval_duration": 4064746278
+                            },
+                            "usage_metadata": {
+                                "input_tokens": 346,
+                                "output_tokens": 29,
+                                "total_tokens": 375,
+                                "input_token_details": {},
+                                "output_token_details": {}
+                            },
+                            "invalid_tool_calls": []
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "tools": {
+                "messages": [
+                    {
+                        "lc": 1,
+                        "type": "constructor",
+                        "id": [
+                            "langchain_core",
+                            "messages",
+                            "ToolMessage"
+                        ],
+                        "kwargs": {
+                            "status": "success",
+                            "content": "{\"urls\":[\"https://example.com/affiliate\",\"https://example.com/about-affiliate\"],\"note\":\"Found highly relevant urls.\"}",
+                            "tool_call_id": "0a56bdd5-da32-4284-a44a-b3a031179b77",
+                            "name": "find_url_on_domain",
+                            "metadata": {
+                                "versions": {
+                                    "@langchain/core": "1.1.32"
+                                }
+                            },
+                            "additional_kwargs": {},
+                            "response_metadata": {}
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    {
+                        "lc": 1,
+                        "type": "constructor",
+                        "id": [
+                            "langchain_core",
+                            "messages",
+                            "AIMessage"
+                        ],
+                        "kwargs": {
+                            "content": "I found some affiliate-related URLs on the domain example.com:\n\n1. [https://example.com/affiliate](https://example.com/affiliate)\n2. [https://example.com/about-affiliate](https://example.com/about-affiliate)\n\nThese pages might contain information or products related to affiliates. You can visit them for more details.",
+                            "additional_kwargs": {},
+                            "tool_calls": [],
+                            "response_metadata": {
+                                "model_provider": "ollama",
+                                "model": "qwen2.5:7b",
+                                "created_at": "2026-03-15T09:24:41.631157294Z",
+                                "done": true,
+                                "done_reason": "stop",
+                                "total_duration": 13865376112,
+                                "load_duration": 123622015,
+                                "prompt_eval_count": 415,
+                                "prompt_eval_duration": 4174368154,
+                                "eval_count": 68,
+                                "eval_duration": 9404493468
+                            },
+                            "usage_metadata": {
+                                "input_tokens": 415,
+                                "output_tokens": 68,
+                                "total_tokens": 483,
+                                "input_token_details": {},
+                                "output_token_details": {}
+                            },
+                            "invalid_tool_calls": []
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}
