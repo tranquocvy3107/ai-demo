@@ -1,6 +1,6 @@
 import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
 import { Repository } from 'typeorm';
+import { z } from 'zod';
 import { ResearchData } from '../entities/research-data.entity';
 
 /**
