@@ -10,11 +10,39 @@ export declare class AiService {
     private llm;
     constructor(configService: ConfigService, researchDataRepo: Repository<ResearchData>, ragService: RagService);
     generateResponse(prompt: string): Promise<string>;
+    private getResearchApp;
+    private extractChunkText;
+    private summarizeValue;
+    private formatDuration;
+    private logEvent;
+    streamDomainResearch(threadId: string, domain: string, prompt: string, options?: {
+        tokenMode?: 'chunk' | 'char';
+        signal?: AbortSignal;
+    }): AsyncGenerator<{
+        type: 'status';
+        data: Record<string, unknown>;
+    } | {
+        type: 'tool';
+        data: Record<string, unknown>;
+    } | {
+        type: 'token';
+        data: Record<string, unknown>;
+    } | {
+        type: 'final';
+        data: Record<string, unknown>;
+    } | {
+        type: 'error';
+        data: Record<string, unknown>;
+    }>;
     private getAllTools;
-    startDomainResearch(threadId: string, domain: string, prompt: string): Promise<{
-        agent?: {
-            messages: import("@langchain/core/messages").AIMessageChunk<import("@langchain/core/messages").MessageStructure<import("@langchain/core/messages").MessageToolSet>>[];
-        } | undefined;
-        tools?: any;
-    }[]>;
+    startDomainResearch(threadId: string, domain: string, prompt: string, options?: {
+        verbose?: boolean;
+    }): Promise<{
+        events?: Record<string, unknown>[] | undefined;
+        message: string;
+        threadId: string;
+        durationMs: number;
+        answer: string;
+        toolsUsed: {};
+    }>;
 }

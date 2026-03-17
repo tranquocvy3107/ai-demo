@@ -1,4 +1,5 @@
 import { AiService } from './ai.service';
+import type { Request, Response } from 'express';
 export declare class AiController {
     private readonly aiService;
     constructor(aiService: AiService);
@@ -9,31 +10,23 @@ export declare class AiController {
         response: string;
         error?: undefined;
     }>;
-    researchDomain(domain: string, prompt: string, existingThreadId?: string): Promise<{
+    researchDomain(domain: string, prompt: string, existingThreadId?: string, verbose?: boolean): Promise<{
         error: string;
-        message?: undefined;
-        threadId?: undefined;
-        stepsReceived?: undefined;
-        data?: undefined;
         details?: undefined;
     } | {
-        message: string;
         threadId: string;
-        stepsReceived: number;
-        data: {
-            agent?: {
-                messages: import("@langchain/core/messages").AIMessageChunk<import("@langchain/core/messages").MessageStructure<import("@langchain/core/messages").MessageToolSet>>[];
-            } | undefined;
-            tools?: any;
-        }[];
+        events?: Record<string, unknown>[] | undefined;
+        message: string;
+        durationMs: number;
+        answer: string;
+        toolsUsed: {};
         error?: undefined;
         details?: undefined;
     } | {
         error: string;
         details: any;
-        message?: undefined;
-        threadId?: undefined;
-        stepsReceived?: undefined;
-        data?: undefined;
     }>;
+    researchDomainStream(domain: string, prompt: string, existingThreadId: string | undefined, req: Request, res: Response): Promise<void>;
+    researchDomainStreamGet(domain: string, prompt: string, existingThreadId: string | undefined, req: Request, res: Response): Promise<void>;
+    private handleResearchStream;
 }

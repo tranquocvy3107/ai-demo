@@ -27,22 +27,63 @@ let AiController = class AiController {
         const response = await this.aiService.generateResponse(prompt);
         return { response };
     }
-    async researchDomain(domain, prompt, existingThreadId) {
+    async researchDomain(domain, prompt, existingThreadId, verbose) {
         if (!domain || !prompt) {
             return { error: 'Domain and prompt are required' };
         }
         const threadId = existingThreadId || (0, uuid_1.v4)();
         try {
-            const resultSteps = await this.aiService.startDomainResearch(threadId, domain, prompt);
+            const result = await this.aiService.startDomainResearch(threadId, domain, prompt, { verbose: Boolean(verbose) });
             return {
-                message: 'Research complete',
+                ...result,
                 threadId,
-                stepsReceived: resultSteps.length,
-                data: resultSteps,
             };
         }
         catch (e) {
             return { error: 'Research failed', details: e.message };
+        }
+    }
+    async researchDomainStream(domain, prompt, existingThreadId, req, res) {
+        await this.handleResearchStream(domain, prompt, existingThreadId, req, res);
+    }
+    async researchDomainStreamGet(domain, prompt, existingThreadId, req, res) {
+        await this.handleResearchStream(domain, prompt, existingThreadId, req, res);
+    }
+    async handleResearchStream(domain, prompt, existingThreadId, req, res) {
+        if (!domain || !prompt) {
+            res.status(common_1.HttpStatus.BAD_REQUEST).json({ error: 'Domain and prompt are required' });
+            return;
+        }
+        const threadId = existingThreadId || (0, uuid_1.v4)();
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders();
+        const abortController = new AbortController();
+        let isClosed = false;
+        req.on('close', () => {
+            isClosed = true;
+            abortController.abort();
+        });
+        const writeEvent = (event, data) => {
+            res.write(`event: ${event}\n`);
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+        writeEvent('status', { message: 'Stream connected', threadId });
+        try {
+            for await (const event of this.aiService.streamDomainResearch(threadId, domain, prompt, { tokenMode: 'char', signal: abortController.signal })) {
+                if (isClosed)
+                    break;
+                writeEvent(event.type, event.data);
+            }
+        }
+        catch (error) {
+            const err = error;
+            writeEvent('error', { message: err.message });
+        }
+        finally {
+            res.end();
         }
     }
 };
@@ -61,10 +102,34 @@ __decorate([
     __param(0, (0, common_1.Body)('domain')),
     __param(1, (0, common_1.Body)('prompt')),
     __param(2, (0, common_1.Body)('threadId')),
+    __param(3, (0, common_1.Body)('verbose')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, Boolean]),
     __metadata("design:returntype", Promise)
 ], AiController.prototype, "researchDomain", null);
+__decorate([
+    (0, common_1.Post)('research-domain/stream'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Body)('domain')),
+    __param(1, (0, common_1.Body)('prompt')),
+    __param(2, (0, common_1.Body)('threadId')),
+    __param(3, (0, common_1.Req)()),
+    __param(4, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], AiController.prototype, "researchDomainStream", null);
+__decorate([
+    (0, common_1.Get)('research-domain/stream'),
+    __param(0, (0, common_1.Query)('domain')),
+    __param(1, (0, common_1.Query)('prompt')),
+    __param(2, (0, common_1.Query)('threadId')),
+    __param(3, (0, common_1.Req)()),
+    __param(4, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], AiController.prototype, "researchDomainStreamGet", null);
 exports.AiController = AiController = __decorate([
     (0, common_1.Controller)('ai'),
     __metadata("design:paramtypes", [ai_service_1.AiService])
