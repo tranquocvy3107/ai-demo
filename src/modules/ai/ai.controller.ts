@@ -1,6 +1,7 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res, Get, Query } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { v4 as uuidv4 } from 'uuid';
+import type { Request, Response } from 'express';
 
 @Controller('ai')
 export class AiController {
@@ -21,6 +22,7 @@ export class AiController {
     @Body('domain') domain: string,
     @Body('prompt') prompt: string,
     @Body('threadId') existingThreadId?: string,
+    @Body('verbose') verbose?: boolean,
   ) {
     if (!domain || !prompt) {
       return { error: 'Domain and prompt are required' };
@@ -32,20 +34,94 @@ export class AiController {
     // Typically, you might kick this off asynchronously or via a queue so as not to hang the HTTP request.
     // For demonstration, we await it.
     try {
-      const resultSteps = await this.aiService.startDomainResearch(
+      const result = await this.aiService.startDomainResearch(
         threadId,
         domain,
         prompt,
+        { verbose: Boolean(verbose) },
       );
 
       return {
-        message: 'Research complete',
+        ...result,
         threadId,
-        stepsReceived: resultSteps.length,
-        data: resultSteps,
       };
     } catch (e) {
       return { error: 'Research failed', details: e.message };
+    }
+  }
+
+  @Post('research-domain/stream')
+  @HttpCode(HttpStatus.OK)
+  async researchDomainStream(
+    @Body('domain') domain: string,
+    @Body('prompt') prompt: string,
+    @Body('threadId') existingThreadId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.handleResearchStream(domain, prompt, existingThreadId, req, res);
+  }
+
+  @Get('research-domain/stream')
+  async researchDomainStreamGet(
+    @Query('domain') domain: string,
+    @Query('prompt') prompt: string,
+    @Query('threadId') existingThreadId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.handleResearchStream(domain, prompt, existingThreadId, req, res);
+  }
+
+  private async handleResearchStream(
+    domain: string,
+    prompt: string,
+    existingThreadId: string | undefined,
+    req: Request,
+    res: Response,
+  ) {
+    if (!domain || !prompt) {
+      res.status(HttpStatus.BAD_REQUEST).json({ error: 'Domain and prompt are required' });
+      return;
+    }
+
+    const threadId = existingThreadId || uuidv4();
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const abortController = new AbortController();
+    let isClosed = false;
+
+    req.on('close', () => {
+      isClosed = true;
+      abortController.abort();
+    });
+
+    const writeEvent = (event: string, data: Record<string, unknown>) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    writeEvent('status', { message: 'Stream connected', threadId });
+
+    try {
+      for await (const event of this.aiService.streamDomainResearch(
+        threadId,
+        domain,
+        prompt,
+        { tokenMode: 'char', signal: abortController.signal },
+      )) {
+        if (isClosed) break;
+        writeEvent(event.type, event.data);
+      }
+    } catch (error) {
+      const err = error as Error;
+      writeEvent('error', { message: err.message });
+    } finally {
+      res.end();
     }
   }
 }
