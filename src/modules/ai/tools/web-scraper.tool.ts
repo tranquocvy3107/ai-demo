@@ -59,46 +59,11 @@ class SmartWebScraperService {
     }
   }
 
-  // ===== SPA DETECTOR =====
-  private isLikelySPA(html: string, textLength: number): boolean {
-    return (
-      textLength < 200 ||
-      html.includes('__NEXT_DATA__') ||
-      html.includes('id="root"') ||
-      html.includes('id="app"') ||
-      html.includes('data-reactroot') ||
-      html.includes('window.__NUXT__') ||
-      html.includes('webpack') ||
-      html.includes('bundle.js')
-    );
-  }
-
-  // ===== CONTENT VALIDATOR =====
-  private isContentValid(html: string, $: cheerio.CheerioAPI): boolean {
+  // ===== SSR DETECTOR =====
+  private isSSR(html: string): boolean {
+    const $ = cheerio.load(html);
     const text = $('body').text().trim();
-    const links = $('a[href]').length;
-
-    if (text.length < 300) {
-      log('❌ Content too short');
-      return false;
-    }
-
-    if (links < 5) {
-      log('❌ Too few links');
-      return false;
-    }
-
-    const hasMeaningfulContent =
-      html.includes('₫') ||
-      html.toLowerCase().includes('product') ||
-      html.toLowerCase().includes('article') ||
-      html.toLowerCase().includes('news');
-
-    if (!hasMeaningfulContent) {
-      log('⚠️ Weak content signal');
-    }
-
-    return true;
+    return text.length > 200; // nếu đủ content → SSR
   }
 
   // ===== SMART FETCH =====
@@ -118,25 +83,11 @@ class SmartWebScraperService {
       return { html, mode, fallbackReason };
     }
 
-    const $ = cheerio.load(html);
-    const text = $('body').text().trim();
-
-    // ===== SPA DETECT =====
-    if (this.isLikelySPA(html, text.length)) {
-      log('⚠️ SPA detected → switching to Playwright');
+    if (!this.isSSR(html)) {
+      log('⚠️ No SSR content → fallback Playwright');
       html = await this.fetchHtmlWithPlaywright(url);
       mode = 'playwright';
-      fallbackReason = 'spa_detected';
-      return { html, mode, fallbackReason };
-    }
-
-    // ===== CONTENT VALIDATION =====
-    if (!this.isContentValid(html, $)) {
-      log('⚠️ Content invalid → fallback Playwright');
-      html = await this.fetchHtmlWithPlaywright(url);
-      mode = 'playwright';
-      fallbackReason = 'invalid_content';
-      return { html, mode, fallbackReason };
+      fallbackReason = 'no_ssr';
     }
 
     return { html, mode, fallbackReason };
@@ -157,9 +108,7 @@ class SmartWebScraperService {
     const removed = $(
       'script, style, nav, footer, header, iframe, noscript, svg',
     ).length;
-
     $('script, style, nav, footer, header, iframe, noscript, svg').remove();
-
     log('Removed elements:', removed);
 
     // ===== META =====
@@ -168,7 +117,6 @@ class SmartWebScraperService {
 
     // ===== HTML CONTENT =====
     let content = $('body').html() || '';
-
     const beforeClean = content.length;
 
     content = content
@@ -176,10 +124,7 @@ class SmartWebScraperService {
       .replace(/>\s+</g, '><')
       .trim();
 
-    log('HTML cleaned:', {
-      before: beforeClean,
-      after: content.length,
-    });
+    log('HTML cleaned:', { before: beforeClean, after: content.length });
 
     if (content.length > MAX_CONTENT_LENGTH) {
       content =
@@ -189,7 +134,6 @@ class SmartWebScraperService {
 
     // ===== LINKS =====
     let links: Array<{ text: string; href: string; domain: string }> = [];
-
     if (extractLinks) {
       const base = new URL(url);
 
@@ -202,13 +146,9 @@ class SmartWebScraperService {
           !text ||
           href.startsWith('#') ||
           href.startsWith('javascript:')
-        ) {
+        )
           return;
-        }
-
-        if (href.startsWith('/')) {
-          href = `${base.origin}${href}`;
-        }
+        if (href.startsWith('/')) href = `${base.origin}${href}`;
 
         const domain = (() => {
           try {
@@ -219,18 +159,13 @@ class SmartWebScraperService {
           }
         })();
 
-        links.push({
-          text: text.substring(0, 100),
-          href,
-          domain,
-        });
+        links.push({ text: text.substring(0, 100), href, domain });
       });
 
       const seen = new Set<string>();
       links = links
         .filter((l) => !seen.has(l.href) && seen.add(l.href))
         .slice(0, 50);
-
       log('Links extracted:', links.length);
     }
 
@@ -244,11 +179,7 @@ class SmartWebScraperService {
       metaDescription,
       html: content,
       ...(extractLinks ? { links } : {}),
-      meta: {
-        mode,
-        durationMs: duration,
-        fallbackReason,
-      },
+      meta: { mode, durationMs: duration, fallbackReason },
     };
   }
 }
@@ -264,7 +195,6 @@ export const webScraperTool = tool(
       return JSON.stringify(result);
     } catch (err) {
       log('ERROR:', err);
-
       return JSON.stringify({
         success: false,
         error: true,
@@ -275,7 +205,7 @@ export const webScraperTool = tool(
   {
     name: 'web_scraper',
     description:
-      'Smart web scraper with SPA detection, content validation, Playwright fallback, and cleaned HTML output',
+      'Smart web scraper using SSR detection and Playwright fallback, cleaned HTML, link extraction, debug logs',
     schema: z.object({
       url: z.string(),
       extractLinks: z.boolean().optional(),

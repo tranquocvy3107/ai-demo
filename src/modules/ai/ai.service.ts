@@ -66,7 +66,8 @@ export class AiService {
             if (item && typeof item === 'object') {
               const typedItem = item as { text?: unknown; content?: unknown };
               if (typeof typedItem.text === 'string') return typedItem.text;
-              if (typeof typedItem.content === 'string') return typedItem.content;
+              if (typeof typedItem.content === 'string')
+                return typedItem.content;
             }
             return '';
           })
@@ -110,11 +111,11 @@ export class AiService {
     prompt: string,
     options?: { tokenMode?: 'chunk' | 'char'; signal?: AbortSignal },
   ): AsyncGenerator<
-    { type: 'status'; data: Record<string, unknown> } |
-    { type: 'tool'; data: Record<string, unknown> } |
-    { type: 'token'; data: Record<string, unknown> } |
-    { type: 'final'; data: Record<string, unknown> } |
-    { type: 'error'; data: Record<string, unknown> }
+    | { type: 'status'; data: Record<string, unknown> }
+    | { type: 'tool'; data: Record<string, unknown> }
+    | { type: 'token'; data: Record<string, unknown> }
+    | { type: 'final'; data: Record<string, unknown> }
+    | { type: 'error'; data: Record<string, unknown> }
   > {
     const tokenMode = options?.tokenMode ?? 'char';
     const startedAt = Date.now();
@@ -142,14 +143,11 @@ export class AiService {
     let finalAnswer = '';
 
     try {
-      const eventStream = researchApp.streamEvents(
-        initialState,
-        {
-          configurable: { thread_id: threadId },
-          signal: options?.signal,
-          version: 'v2',
-        },
-      );
+      const eventStream = researchApp.streamEvents(initialState, {
+        configurable: { thread_id: threadId },
+        signal: options?.signal,
+        version: 'v2',
+      });
 
       for await (const event of eventStream) {
         const streamEvent = event as StreamEvent;
@@ -184,7 +182,10 @@ export class AiService {
           continue;
         }
 
-        if (eventName === 'on_chat_model_stream' || eventName === 'on_llm_stream') {
+        if (
+          eventName === 'on_chat_model_stream' ||
+          eventName === 'on_llm_stream'
+        ) {
           const chunkText = this.extractChunkText(streamEvent.data?.chunk);
           if (!chunkText) continue;
           finalAnswer += chunkText;
@@ -200,7 +201,10 @@ export class AiService {
       }
 
       const durationMs = Date.now() - startedAt;
-      this.logEvent(threadId, `Completed in ${this.formatDuration(durationMs)}`);
+      this.logEvent(
+        threadId,
+        `Completed in ${this.formatDuration(durationMs)}`,
+      );
       yield {
         type: 'final',
         data: {

@@ -3,19 +3,28 @@ import { z } from 'zod';
 import * as cheerio from 'cheerio';
 import { chromium } from 'playwright';
 
-const MAX_RESULTS = 10;
-const DEBUG = true;
+// ===== TODO =====
+// 1. Rotate User-Agent (anti block)
+// 2. Parallel search (multi-engine)
 
+const MAX_RESULTS = 10;
+
+// ===== DEBUG =====
+const DEBUG = process.env.DEBUG === 'true';
+
+function log(...args: any[]) {
+  if (DEBUG) {
+    console.log('[DDG]', ...args);
+  }
+}
+
+// ===== TYPES =====
 type SearchResult = {
   title: string;
-  url: string;
+  url?: string;
+  domain?: string;
   snippet?: string;
 };
-
-// ===== LOGGER =====
-function log(...args: unknown[]) {
-  if (DEBUG) console.log(...args);
-}
 
 // ===== UTILS =====
 function decodeDuckDuckGoUrl(url: string): string {
@@ -23,47 +32,70 @@ function decodeDuckDuckGoUrl(url: string): string {
   return match ? decodeURIComponent(match[1]) : url;
 }
 
-// Filter out ads (DuckDuckGo ad URLs usually start with /y.js?ad_)
 function isAdUrl(url: string): boolean {
   return url.includes('/y.js?ad_');
 }
 
-// Dedupe results by URL
-function dedupeResults(results: SearchResult[]): SearchResult[] {
-  const seen = new Set<string>();
-  const deduped: SearchResult[] = [];
-  for (const r of results) {
-    if (!seen.has(r.url)) {
-      deduped.push(r);
-      seen.add(r.url);
+function extractDomain(url: string, includeSubdomain = false): string {
+  try {
+    const u = new URL(url);
+    let hostname = u.hostname.replace(/^www\./, '');
+
+    if (!includeSubdomain) {
+      const parts = hostname.split('.');
+      if (parts.length > 2) {
+        hostname = parts.slice(-2).join('.');
+      }
     }
+
+    return hostname;
+  } catch (err) {
+    log('extractDomain error:', err);
+    return '';
   }
-  return deduped;
 }
 
-// ===== FETCH HTML =====
-async function fetchDuckDuckGoHTML(query: string, start = 0): Promise<string> {
-  const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}&s=${start}`;
+// ===== DEDUPE =====
+function dedupeByKey<T>(
+  arr: T[],
+  getKey: (item: T) => string | undefined,
+): T[] {
+  const seen = new Set<string>();
 
-  log('[DDG][FETCH] URL:', url);
+  return arr.filter((item) => {
+    const key = getKey(item);
+    if (!key || seen.has(key)) return false;
 
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-    },
+    seen.add(key);
+    return true;
   });
+}
 
-  const html = await res.text();
-
-  log('[DDG][FETCH] HTML length:', html.length);
-  log('[DDG][FETCH] Preview:', html.slice(0, 200));
-
-  return html;
+// ===== FORMAT =====
+function formatResults(
+  results: SearchResult[],
+  mode: 'url' | 'domain' | 'both',
+) {
+  return results.map((r) => {
+    switch (mode) {
+      case 'domain':
+        return { title: r.title, domain: r.domain, snippet: r.snippet };
+      case 'url':
+        return { title: r.title, url: r.url, snippet: r.snippet };
+      default:
+        return r;
+    }
+  });
 }
 
 // ===== PARSE HTML =====
-function parseDuckDuckGoHTML(html: string, limit: number): SearchResult[] {
+function parseDuckDuckGoHTML(
+  html: string,
+  limit: number,
+  includeSubdomain: boolean,
+): SearchResult[] {
+  log('Parsing HTML...');
+
   const $ = cheerio.load(html);
   const results: SearchResult[] = [];
 
@@ -76,65 +108,63 @@ function parseDuckDuckGoHTML(html: string, limit: number): SearchResult[] {
 
     const url = decodeDuckDuckGoUrl(rawUrl);
 
-    // Skip ads
     if (!title || !url || isAdUrl(url)) return;
 
-    results.push({ title, url, snippet });
+    const domain = extractDomain(url, includeSubdomain);
+
+    results.push({ title, url, domain, snippet });
   });
 
-  log('[DDG][PARSE] Results count (before dedupe/filter):', results.length);
+  log('HTML results found:', results.length);
 
-  return dedupeResults(results).slice(0, limit);
+  return dedupeByKey(results, (r) => r.url).slice(0, limit);
 }
 
 // ===== PLAYWRIGHT FALLBACK =====
 async function searchDuckDuckGoPlaywright(
   query: string,
   limit: number,
+  includeSubdomain: boolean,
 ): Promise<SearchResult[]> {
-  log('[DDG][PLAYWRIGHT] Start fallback');
+  log('Using Playwright fallback...');
 
   const browser = await chromium.launch({ headless: true });
 
   try {
-    const context = await browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-      viewport: { width: 1280, height: 800 },
-    });
+    const page = await browser.newPage();
 
-    const page = await context.newPage();
-
-    const url = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
-    log('[DDG][PLAYWRIGHT] Goto:', url);
-
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000); // anti-bot delay
+    await page.goto(`https://duckduckgo.com/?q=${encodeURIComponent(query)}`);
+    await page.waitForTimeout(2000);
 
     const html = await page.content();
-    log('[DDG][PLAYWRIGHT] HTML length:', html.length);
-
     const $ = cheerio.load(html);
+
     const results: SearchResult[] = [];
 
-    const selector = 'a[data-testid="result-title-a"]';
-
-    $(selector).each((_, el) => {
+    $('a[data-testid="result-title-a"]').each((_, el) => {
       if (results.length >= limit) return false;
 
-      const element = $(el);
-      const title = element.text().trim();
-      const rawUrl = element.attr('href') || '';
+      const title = $(el).text().trim();
+      const rawUrl = $(el).attr('href') || '';
       const url = decodeDuckDuckGoUrl(rawUrl);
 
-      if (title && url && !isAdUrl(url)) {
-        results.push({ title, url, snippet: '' });
-      }
+      if (!title || !url || isAdUrl(url)) return;
+
+      const domain = extractDomain(url, includeSubdomain);
+
+      results.push({
+        title,
+        url,
+        domain,
+        snippet: '',
+      });
     });
 
-    return dedupeResults(results).slice(0, limit);
+    log('Playwright results found:', results.length);
+
+    return dedupeByKey(results, (r) => r.url).slice(0, limit);
   } catch (err) {
-    log('[DDG][PLAYWRIGHT] ERROR:', err);
+    log('Playwright error:', err);
     return [];
   } finally {
     await browser.close();
@@ -142,63 +172,76 @@ async function searchDuckDuckGoPlaywright(
 }
 
 // ===== MAIN SEARCH =====
-async function searchDuckDuckGo(query: string, limit: number) {
-  log('\n====== DDG SEARCH START ======');
-  log('[DDG] Query:', query);
+async function searchDuckDuckGo(
+  query: string,
+  limit: number,
+  options: {
+    onlyUniqueDomain?: boolean;
+    includeSubdomain?: boolean;
+  },
+) {
+  const includeSubdomain = options.includeSubdomain ?? false;
 
-  const results: SearchResult[] = [];
-  let start = 0;
-  const pageSize = 10;
+  log('Search start:', { query, limit, options });
 
-  // Try fetching multiple pages until enough results
-  while (results.length < limit) {
-    try {
-      const html = await fetchDuckDuckGoHTML(query, start);
-      const pageResults = parseDuckDuckGoHTML(html, limit - results.length);
+  let results: SearchResult[] = [];
 
-      results.push(...pageResults);
+  try {
+    const res = await fetch(
+      `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+    );
 
-      if (pageResults.length < pageSize) {
-        // No more results on next page
-        break;
-      }
+    const html = await res.text();
 
-      start += pageSize;
-    } catch (err) {
-      log('[DDG] HTML fetch/parse ERROR:', err);
-      break;
-    }
+    results = parseDuckDuckGoHTML(html, limit, includeSubdomain);
+  } catch (err) {
+    log('HTML fetch error:', err);
   }
 
-  if (results.length >= limit) {
-    log('[DDG] SUCCESS via HTML, total results:', results.length);
-    return { source: 'duckduckgo', totalResults: results.length, results };
+  // ===== FALLBACK =====
+  if (results.length < limit) {
+    const fallback = await searchDuckDuckGoPlaywright(
+      query,
+      limit - results.length,
+      includeSubdomain,
+    );
+
+    results = [...results, ...fallback];
   }
 
-  log('[DDG] HTML insufficient, fallback → Playwright');
+  // ===== DEDUPE DOMAIN =====
+  if (options.onlyUniqueDomain) {
+    results = dedupeByKey(results, (r) => r.domain);
+    log('After domain dedupe:', results.length);
+  }
 
-  const fallback = await searchDuckDuckGoPlaywright(query, limit - results.length);
-  const allResults = [...results, ...fallback].slice(0, limit);
+  log('Final results:', results.length);
 
-  log('====== DDG SEARCH END ======\n');
-
-  return {
-    source: fallback.length > 0 ? 'playwright' : 'duckduckgo',
-    totalResults: allResults.length,
-    results: allResults,
-  };
+  return results.slice(0, limit);
 }
 
 // ===== TOOL =====
 export const webSearchDDGTool = tool(
-  async ({ query, numResults }) => {
+  async ({ query, numResults, mode, onlyUniqueDomain, includeSubdomain }) => {
     const limit = numResults || MAX_RESULTS;
 
     try {
-      const result = await searchDuckDuckGo(query, limit);
-      return JSON.stringify({ query, ...result });
-    } catch (err) {
+      const results = await searchDuckDuckGo(query, limit, {
+        onlyUniqueDomain,
+        includeSubdomain,
+      });
+
       return JSON.stringify({
+        success: true,
+        query,
+        totalResults: results.length,
+        results: formatResults(results, mode || 'both'),
+      });
+    } catch (err) {
+      log('Tool error:', err);
+
+      return JSON.stringify({
+        success: false,
         error: true,
         message: err instanceof Error ? err.message : 'Unknown error',
       });
@@ -206,7 +249,14 @@ export const webSearchDDGTool = tool(
   },
   {
     name: 'web_search',
-    description: 'DuckDuckGo search with HTML + Playwright fallback, dedupe & filter ads',
-    schema: z.object({ query: z.string(), numResults: z.number().optional() }),
+    description:
+      'DuckDuckGo search with domain filter, subdomain control, and flexible output',
+    schema: z.object({
+      query: z.string(),
+      numResults: z.number().optional(),
+      mode: z.enum(['url', 'domain', 'both']).optional(),
+      onlyUniqueDomain: z.boolean().optional(),
+      includeSubdomain: z.boolean().optional(),
+    }),
   },
 );

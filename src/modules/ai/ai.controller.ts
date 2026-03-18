@@ -1,4 +1,14 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Req,
+  Res,
+  Get,
+  Query,
+} from '@nestjs/common';
 import { AiService } from './ai.service';
 import { v4 as uuidv4 } from 'uuid';
 import type { Request, Response } from 'express';
@@ -81,7 +91,9 @@ export class AiController {
     res: Response,
   ) {
     if (!domain || !prompt) {
-      res.status(HttpStatus.BAD_REQUEST).json({ error: 'Domain and prompt are required' });
+      res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ error: 'Domain and prompt are required' });
       return;
     }
 
