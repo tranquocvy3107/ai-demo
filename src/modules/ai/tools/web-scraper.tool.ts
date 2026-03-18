@@ -1,145 +1,284 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
+import { chromium, Browser } from 'playwright';
 
-const MAX_CONTENT_LENGTH = 6000;
+// ===== CONFIG =====
+const MAX_CONTENT_LENGTH = 10000;
+const DEBUG = process.env.DEBUG === 'true';
 
-export const webScraperTool = tool(
-  async ({ url, selector, extractLinks }) => {
+// ===== LOGGER =====
+function log(...args: any[]) {
+  if (DEBUG) console.log('[WebScraper]', ...args);
+}
+
+// ===== BROWSER (reuse) =====
+let browser: Browser | null = null;
+
+async function getBrowser() {
+  if (!browser) {
+    log('Launching browser...');
+    browser = await chromium.launch({ headless: true });
+  }
+  return browser;
+}
+
+// ===== SERVICE =====
+class SmartWebScraperService {
+  // ===== FAST FETCH =====
+  private async fetchHtml(url: string): Promise<string> {
+    log('Fetching via HTTP...');
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        Accept: 'text/html',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  }
+
+  // ===== PLAYWRIGHT FETCH =====
+  private async fetchHtmlWithPlaywright(url: string): Promise<string> {
+    log('Fetching via Playwright...');
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+
     try {
-      console.log(`[WebScraper] Scraping: ${url}${selector ? ` (selector: ${selector})` : ''}`);
-
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-        signal: AbortSignal.timeout(20000),
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
       });
 
-      if (!response.ok) {
-        return JSON.stringify({
-          error: true,
-          message: `HTTP ${response.status} ${response.statusText}`,
-        });
-      }
+      await page.waitForTimeout(2000); // wait JS render
+      return await page.content();
+    } finally {
+      await page.close();
+    }
+  }
 
-      const html = await response.text();
-      const $ = cheerio.load(html);
+  // ===== SPA DETECTOR =====
+  private isLikelySPA(html: string, textLength: number): boolean {
+    return (
+      textLength < 200 ||
+      html.includes('__NEXT_DATA__') ||
+      html.includes('id="root"') ||
+      html.includes('id="app"') ||
+      html.includes('data-reactroot') ||
+      html.includes('window.__NUXT__') ||
+      html.includes('webpack') ||
+      html.includes('bundle.js')
+    );
+  }
 
-      // Remove noise elements
-      $(
-        'script, style, nav, footer, header, iframe, noscript, svg, img, [role="banner"], [role="navigation"], .cookie-banner, .popup',
-      ).remove();
+  // ===== CONTENT VALIDATOR =====
+  private isContentValid(html: string, $: cheerio.CheerioAPI): boolean {
+    const text = $('body').text().trim();
+    const links = $('a[href]').length;
 
-      // Extract page metadata
-      const title = $('title').text().trim();
-      const metaDescription =
-        $('meta[name="description"]').attr('content') || '';
+    if (text.length < 300) {
+      log('❌ Content too short');
+      return false;
+    }
 
-      // Extract content based on selector or default to main content
-      let content = '';
-      if (selector) {
-        content = $(selector)
-          .map((_, el) => $(el).text().trim())
-          .get()
-          .join('\n\n');
-      } else {
-        // Try common content containers, fall back to body
-        const contentSelectors = [
-          'main',
-          'article',
-          '[role="main"]',
-          '.content',
-          '#content',
-          '.post-content',
-          '.entry-content',
-        ];
-        let found = false;
-        for (const sel of contentSelectors) {
-          const el = $(sel);
-          if (el.length > 0 && el.text().trim().length > 100) {
-            content = el.text().trim();
-            found = true;
-            break;
-          }
+    if (links < 5) {
+      log('❌ Too few links');
+      return false;
+    }
+
+    const hasMeaningfulContent =
+      html.includes('₫') ||
+      html.toLowerCase().includes('product') ||
+      html.toLowerCase().includes('article') ||
+      html.toLowerCase().includes('news');
+
+    if (!hasMeaningfulContent) {
+      log('⚠️ Weak content signal');
+    }
+
+    return true;
+  }
+
+  // ===== SMART FETCH =====
+  private async getHtmlSmart(url: string) {
+    let html = '';
+    let mode: 'fetch' | 'playwright' = 'fetch';
+    let fallbackReason: string | null = null;
+
+    try {
+      html = await this.fetchHtml(url);
+      log('Fetch success');
+    } catch (err) {
+      log('Fetch failed → fallback Playwright', err);
+      html = await this.fetchHtmlWithPlaywright(url);
+      mode = 'playwright';
+      fallbackReason = 'fetch_failed';
+      return { html, mode, fallbackReason };
+    }
+
+    const $ = cheerio.load(html);
+    const text = $('body').text().trim();
+
+    // ===== SPA DETECT =====
+    if (this.isLikelySPA(html, text.length)) {
+      log('⚠️ SPA detected → switching to Playwright');
+      html = await this.fetchHtmlWithPlaywright(url);
+      mode = 'playwright';
+      fallbackReason = 'spa_detected';
+      return { html, mode, fallbackReason };
+    }
+
+    // ===== CONTENT VALIDATION =====
+    if (!this.isContentValid(html, $)) {
+      log('⚠️ Content invalid → fallback Playwright');
+      html = await this.fetchHtmlWithPlaywright(url);
+      mode = 'playwright';
+      fallbackReason = 'invalid_content';
+      return { html, mode, fallbackReason };
+    }
+
+    return { html, mode, fallbackReason };
+  }
+
+  // ===== MAIN SCRAPE =====
+  async scrape(url: string, extractLinks?: boolean) {
+    const start = Date.now();
+
+    log('START:', url);
+
+    const { html, mode, fallbackReason } = await this.getHtmlSmart(url);
+    log('Mode used:', mode);
+
+    const $ = cheerio.load(html);
+
+    // ===== REMOVE NOISE =====
+    const removed = $(
+      'script, style, nav, footer, header, iframe, noscript, svg',
+    ).length;
+
+    $('script, style, nav, footer, header, iframe, noscript, svg').remove();
+
+    log('Removed elements:', removed);
+
+    // ===== META =====
+    const title = $('title').text().trim();
+    const metaDescription = $('meta[name="description"]').attr('content') || '';
+
+    // ===== HTML CONTENT =====
+    let content = $('body').html() || '';
+
+    const beforeClean = content.length;
+
+    content = content
+      .replace(/\s{2,}/g, ' ')
+      .replace(/>\s+</g, '><')
+      .trim();
+
+    log('HTML cleaned:', {
+      before: beforeClean,
+      after: content.length,
+    });
+
+    if (content.length > MAX_CONTENT_LENGTH) {
+      content =
+        content.slice(0, MAX_CONTENT_LENGTH) +
+        `<!-- TRUNCATED ${content.length} -->`;
+    }
+
+    // ===== LINKS =====
+    let links: Array<{ text: string; href: string; domain: string }> = [];
+
+    if (extractLinks) {
+      const base = new URL(url);
+
+      $('a[href]').each((_, el) => {
+        let href = $(el).attr('href') || '';
+        const text = $(el).text().trim();
+
+        if (
+          !href ||
+          !text ||
+          href.startsWith('#') ||
+          href.startsWith('javascript:')
+        ) {
+          return;
         }
-        if (!found) {
-          content = $('body').text().trim();
+
+        if (href.startsWith('/')) {
+          href = `${base.origin}${href}`;
         }
-      }
 
-      // Clean up whitespace
-      content = content.replace(/\s+/g, ' ').replace(/\n\s*\n/g, '\n');
-
-      // Extract links if requested
-      let links: Array<{ text: string; href: string }> = [];
-      if (extractLinks) {
-        const baseUrl = new URL(url);
-        $('a[href]').each((_, el) => {
-          const href = $(el).attr('href') || '';
-          const text = $(el).text().trim();
-          if (text && href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-            let fullUrl = href;
-            if (href.startsWith('/')) {
-              fullUrl = `${baseUrl.protocol}//${baseUrl.host}${href}`;
-            }
-            links.push({ text: text.substring(0, 100), href: fullUrl });
+        const domain = (() => {
+          try {
+            const u = new URL(href);
+            return u.hostname.replace(/^www\./, '');
+          } catch {
+            return '';
           }
+        })();
+
+        links.push({
+          text: text.substring(0, 100),
+          href,
+          domain,
         });
-
-        // Dedupe and limit
-        const seen = new Set<string>();
-        links = links.filter((l) => {
-          if (seen.has(l.href)) return false;
-          seen.add(l.href);
-          return true;
-        }).slice(0, 50);
-      }
-
-      // Truncate content
-      if (content.length > MAX_CONTENT_LENGTH) {
-        content =
-          content.substring(0, MAX_CONTENT_LENGTH) +
-          `\n...[TRUNCATED, total ${content.length} chars]`;
-      }
-
-      return JSON.stringify({
-        url,
-        title,
-        metaDescription,
-        content,
-        ...(extractLinks ? { links } : {}),
       });
-    } catch (error) {
+
+      const seen = new Set<string>();
+      links = links
+        .filter((l) => !seen.has(l.href) && seen.add(l.href))
+        .slice(0, 50);
+
+      log('Links extracted:', links.length);
+    }
+
+    const duration = Date.now() - start;
+    log('DONE in', duration, 'ms');
+
+    return {
+      success: true,
+      url,
+      title,
+      metaDescription,
+      html: content,
+      ...(extractLinks ? { links } : {}),
+      meta: {
+        mode,
+        durationMs: duration,
+        fallbackReason,
+      },
+    };
+  }
+}
+
+// ===== INSTANCE =====
+const scraper = new SmartWebScraperService();
+
+// ===== TOOL =====
+export const webScraperTool = tool(
+  async ({ url, extractLinks }) => {
+    try {
+      const result = await scraper.scrape(url, extractLinks);
+      return JSON.stringify(result);
+    } catch (err) {
+      log('ERROR:', err);
+
       return JSON.stringify({
+        success: false,
         error: true,
-        message:
-          error instanceof Error ? error.message : 'Unknown error occurred',
+        message: err instanceof Error ? err.message : 'Unknown error',
       });
     }
   },
   {
     name: 'web_scraper',
     description:
-      'Scrapes a web page and extracts readable text content. Use this to read the full content of a page, extract specific sections with CSS selectors, or discover all links on a page. Good for reading affiliate program details, pricing pages, terms, etc.',
+      'Smart web scraper with SPA detection, content validation, Playwright fallback, and cleaned HTML output',
     schema: z.object({
-      url: z.string().describe('The full URL of the page to scrape'),
-      selector: z
-        .string()
-        .optional()
-        .describe(
-          'Optional CSS selector to extract specific elements (e.g. ".pricing-table", "#affiliate-info", "article")',
-        ),
-      extractLinks: z
-        .boolean()
-        .optional()
-        .describe(
-          'If true, also extracts all links from the page. Useful for discovering affiliate signup pages, subpages, etc.',
-        ),
+      url: z.string(),
+      extractLinks: z.boolean().optional(),
     }),
   },
 );
