@@ -54,6 +54,10 @@ ${previousMemory.map((mem, idx) => `Step ${idx + 1}: ${mem}`).join('\n')}
 - **Target Domain**: ${domain}
 - **Goal**: ${goal}
 
+## CRITICAL RULES FOR TOOL USAGE:
+1. **NO PARALLEL SCRAPING**: You MUST NOT call the \`web_scraper\` tool multiple times in parallel. Only call it ONCE per step.
+2. **SEQUENTIAL WORKFLOW**: Scrape a page -> Read its content -> Decide if you need to use \`save_data\` -> Save data if needed -> Then, and only then, proceed to scrape the next page.
+
 Please proceed sequentially and systematically with the next step of your research.`;
 
   return prompt;

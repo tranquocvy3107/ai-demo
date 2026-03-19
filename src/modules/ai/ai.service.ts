@@ -41,6 +41,7 @@ export class AiService {
       baseUrl: this.configService.get<string>('ai.ollamaBaseUrl'),
       model: 'qwen2.5:7b',
       temperature: 0,
+      numCtx: 32768, // Tăng context window lên 32k để xử lý được nhiều content web & RAG context mà không bị truncate
     });
   }
 

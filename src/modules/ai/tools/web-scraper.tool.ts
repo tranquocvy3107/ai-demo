@@ -2,7 +2,7 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
 
-const MAX_CONTENT_LENGTH = 8000; // Tăng lên 8k để AI có nhiều context hơn
+const MAX_CONTENT_LENGTH = 5000; // Giảm xuống 4000 để an toàn cho context window (tổng token) của AI
 
 export const webScraperTool = tool(
   async ({ url, selector, extractLinks }) => {
@@ -105,12 +105,12 @@ export const webScraperTool = tool(
 
         // Chỉ ưu tiên các links liên quan đến pricing/affiliate/about
         const priorityKeywords = ['affiliate', 'pricing', 'partner', 'plan', 'price', '/sign-up', '/register'];
-        links = links.filter((l, index, self) => 
-            self.findIndex(t => t.href === l.href) === index // Deduplicate
-        ).sort((a,b) => {
-            const aHas = priorityKeywords.some(kw => a.href.toLowerCase().includes(kw) || a.text.toLowerCase().includes(kw));
-            const bHas = priorityKeywords.some(kw => b.href.toLowerCase().includes(kw) || b.text.toLowerCase().includes(kw));
-            return aHas === bHas ? 0 : aHas ? -1 : 1;
+        links = links.filter((l, index, self) =>
+          self.findIndex(t => t.href === l.href) === index // Deduplicate
+        ).sort((a, b) => {
+          const aHas = priorityKeywords.some(kw => a.href.toLowerCase().includes(kw) || a.text.toLowerCase().includes(kw));
+          const bHas = priorityKeywords.some(kw => b.href.toLowerCase().includes(kw) || b.text.toLowerCase().includes(kw));
+          return aHas === bHas ? 0 : aHas ? -1 : 1;
         }).slice(0, 30);
       }
 
