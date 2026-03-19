@@ -1,25 +1,130 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
+import type { AnyNode, Element } from 'domhandler';
 
-// ===== CONFIG =====
-const MAX_ITEMS = 50;
+// Max markdown length before truncation
+const MAX_MARKDOWN_LENGTH = 12000;
+const MAX_LINKS = 80;
 
-// ===== PARSER =====
-function parseHtml(html: string, baseUrl: string) {
-  const $ = cheerio.load(html);
+// ===== HTML → MARKDOWN =====
+// Converts cleaned HTML into readable markdown so the LLM sees all content.
+// Nothing is filtered out — uncertain content is kept for the LLM to review.
 
-  // remove noise
-  $('script, style, nav, footer, header, iframe, noscript, svg').remove();
+function nodeToMarkdown($: cheerio.CheerioAPI, node: AnyNode): string {
+  if (node.type === 'text') {
+    return (node as { data: string }).data.replace(/\s+/g, ' ');
+  }
 
-  const links: any[] = [];
-  const products: any[] = [];
-  const texts: any[] = [];
+  if (node.type !== 'tag') return '';
 
-  // ===== LINKS =====
-  $('a').each((_, el) => {
-    let href = $(el).attr('href');
-    if (!href) return;
+  const el = node as Element;
+  const tag = el.tagName?.toLowerCase() ?? '';
+  const children = () =>
+    el.children.map((c) => nodeToMarkdown($, c)).join('');
+
+  switch (tag) {
+    // Headings
+    case 'h1': return `\n# ${children().trim()}\n`;
+    case 'h2': return `\n## ${children().trim()}\n`;
+    case 'h3': return `\n### ${children().trim()}\n`;
+    case 'h4': return `\n#### ${children().trim()}\n`;
+    case 'h5': return `\n##### ${children().trim()}\n`;
+    case 'h6': return `\n###### ${children().trim()}\n`;
+
+    // Block elements
+    case 'p':
+    case 'div':
+    case 'section':
+    case 'article':
+    case 'main':
+    case 'aside':
+    case 'blockquote': {
+      const inner = children().trim();
+      return inner ? `\n${inner}\n` : '';
+    }
+
+    // Lists
+    case 'ul':
+    case 'ol': return `\n${children()}\n`;
+    case 'li': return `\n- ${children().trim()}`;
+
+    // Inline elements
+    case 'strong':
+    case 'b': return `**${children()}**`;
+    case 'em':
+    case 'i': return `_${children()}_`;
+    case 'code': return `\`${children()}\``;
+    case 'pre': return `\n\`\`\`\n${children()}\n\`\`\`\n`;
+
+    // Links — keep inline so LLM sees URL in context
+    case 'a': {
+      const href = $(el).attr('href') || '';
+      const text = children().trim();
+      if (!href || !text) return text;
+      return `[${text}](${href})`;
+    }
+
+    // Line break
+    case 'br': return '\n';
+    case 'hr': return '\n---\n';
+
+    // Tables → markdown table
+    case 'table': return tableToMarkdown($, el);
+
+    // Skip entirely — these are noise even after web_scraper cleanup
+    case 'script':
+    case 'style':
+    case 'noscript':
+    case 'iframe':
+    case 'svg':
+    case 'img':
+      return '';
+
+    // Span and unknown inline tags — just render children
+    default: return children();
+  }
+}
+
+function tableToMarkdown($: cheerio.CheerioAPI, tableEl: Element): string {
+  const rows: string[][] = [];
+
+  $(tableEl)
+    .find('tr')
+    .each((_, tr) => {
+      const cells: string[] = [];
+      $(tr)
+        .find('th, td')
+        .each((_, cell) => {
+          cells.push($(cell).text().replace(/\s+/g, ' ').trim());
+        });
+      if (cells.length > 0) rows.push(cells);
+    });
+
+  if (rows.length === 0) return '';
+
+  const colCount = Math.max(...rows.map((r) => r.length));
+  const pad = (row: string[]) =>
+    Array.from({ length: colCount }, (_, i) => row[i] ?? '').join(' | ');
+
+  const header = pad(rows[0]);
+  const separator = Array(colCount).fill('---').join(' | ');
+  const body = rows.slice(1).map(pad).join('\n');
+
+  return `\n| ${header} |\n| ${separator} |\n${rows.slice(1).length > 0 ? '| ' + body.split('\n').join(' |\n| ') + ' |' : ''}\n`;
+}
+
+// ===== LINKS =====
+function extractLinks(
+  $: cheerio.CheerioAPI,
+  baseUrl: string,
+): { text: string; url: string }[] {
+  const seen = new Set<string>();
+  const links: { text: string; url: string }[] = [];
+
+  $('a[href]').each((_, el) => {
+    let href = $(el).attr('href') || '';
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.includes('mailto:')) return;
 
     try {
       href = new URL(href, baseUrl).href;
@@ -27,70 +132,60 @@ function parseHtml(html: string, baseUrl: string) {
       return;
     }
 
-    if (
-      href.startsWith('javascript:') ||
-      href.startsWith('#') ||
-      href.includes('mailto:')
-    )
-      return;
+    if (seen.has(href)) return;
+    seen.add(href);
 
-    const anchorText = $(el).text().trim();
-
-    const parent = $(el).closest('div, p, li, section');
-    const context = parent.text().trim().slice(0, 300);
-
-    links.push({
-      url: href,
-      anchorText,
-      context,
-    });
+    const text = $(el).text().replace(/\s+/g, ' ').trim();
+    if (text) links.push({ text, url: href });
   });
 
-  // dedupe links
-  const seen = new Set();
-  const cleanLinks = links
-    .filter((l) => !seen.has(l.url) && seen.add(l.url))
-    .slice(0, MAX_ITEMS);
+  return links.slice(0, MAX_LINKS);
+}
 
-  // ===== PRODUCTS / PRICE =====
-  const priceRegex = /(\$|€|£)?\s?\d+([.,]\d{1,2})?/;
-
-  $('[class*="price"], [id*="price"], body *').each((_, el) => {
-    const text = $(el).text().trim();
-
-    if (!text || text.length > 200) return;
-
-    if (priceRegex.test(text)) {
-      const price = text.match(priceRegex)?.[0];
-
-      products.push({
-        price,
-        context: text,
-      });
+// ===== JSON-LD =====
+function extractJsonLd($: cheerio.CheerioAPI): unknown[] {
+  const results: unknown[] = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      results.push(JSON.parse($(el).html() || '{}'));
+    } catch {
+      // ignore malformed
     }
   });
+  return results;
+}
 
-  const cleanProducts = products.slice(0, MAX_ITEMS);
+// ===== MAIN PARSER =====
+function parseHtml(html: string, baseUrl: string) {
+  const $ = cheerio.load(html);
 
-  // ===== TEXT =====
-  $('p, li, div').each((_, el) => {
-    const content = $(el).text().trim();
+  const title = $('title').text().trim();
+  const metaDescription = $('meta[name="description"]').attr('content') || '';
+  const links = extractLinks($, baseUrl);
+  const jsonLd = extractJsonLd($);
 
-    if (content.length > 40 && content.length < 500) {
-      texts.push({ content });
+  // Convert full body to markdown — nothing excluded
+  const rawMarkdown = ($('body').get(0)?.children ?? [])
+    .map((c) => nodeToMarkdown($, c))
+    .join('')
+    .replace(/\n{3,}/g, '\n\n') // collapse excessive blank lines
+    .trim();
+
+  let markdown = rawMarkdown;
+  let truncated = false;
+
+  if (markdown.length > MAX_MARKDOWN_LENGTH) {
+    markdown = markdown.slice(0, MAX_MARKDOWN_LENGTH);
+    // cut at last complete line to avoid mid-sentence truncation
+    const lastNewline = markdown.lastIndexOf('\n');
+    if (lastNewline > MAX_MARKDOWN_LENGTH * 0.8) {
+      markdown = markdown.slice(0, lastNewline);
     }
-  });
+    markdown += `\n\n...[TRUNCATED — ${rawMarkdown.length} total chars. Use a CSS selector with web_scraper to target a specific section if needed.]`;
+    truncated = true;
+  }
 
-  const cleanTexts = texts.slice(0, MAX_ITEMS);
-
-  return {
-    title: $('title').text(),
-    metaDescription: $('meta[name="description"]').attr('content') || '',
-
-    links: cleanLinks,
-    products: cleanProducts,
-    texts: cleanTexts,
-  };
+  return { title, metaDescription, markdown, links, jsonLd, truncated };
 }
 
 // ===== TOOL =====
@@ -98,12 +193,7 @@ export const parseHtmlToStructuredTool = tool(
   ({ html, url }) => {
     try {
       const data = parseHtml(html, url);
-
-      return JSON.stringify({
-        success: true,
-        url,
-        ...data,
-      });
+      return JSON.stringify({ success: true, url, ...data });
     } catch (err) {
       return JSON.stringify({
         success: false,
@@ -114,10 +204,10 @@ export const parseHtmlToStructuredTool = tool(
   {
     name: 'parse_html_structured',
     description:
-      'Parse cleaned HTML into structured JSON (links, products, texts) for affiliate and product analysis',
+      'Converts cleaned HTML (from web_scraper) into readable Markdown so the LLM can review all page content without losing information. Returns: full page as markdown (headings, tables, lists, inline links, bold text all preserved), a deduplicated links list for follow-up scraping, and raw JSON-LD schema.org data (most reliable source for prices and product info). Nothing is filtered out — the LLM decides what is relevant. If truncated, a note is appended with instructions to target a specific section.',
     schema: z.object({
-      html: z.string().describe('Raw HTML content from scraper'),
-      url: z.string().describe('Base URL for resolving relative links'),
+      html: z.string().describe('Cleaned HTML returned by web_scraper'),
+      url: z.string().describe('Base URL of the page for resolving relative links'),
     }),
   },
 );

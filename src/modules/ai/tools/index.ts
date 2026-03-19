@@ -24,6 +24,5 @@ export const staticTools = [
   htmlToTextTool,
   parseHtmlToStructuredTool,
   httpRequestTool,
-  //   webSearchTool,
   webScraperTool,
 ];

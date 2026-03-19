@@ -83,6 +83,105 @@ export class AiController {
     await this.handleResearchStream(domain, prompt, existingThreadId, req, res);
   }
 
+  // ── Affiliate & Pricing Research (v2) ────────────────────────────────────
+
+  @Post('affiliate-research')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async affiliateResearch(
+    @Body('prompt') prompt: string,
+    @Body('threadId') existingThreadId?: string,
+    @Body('verbose') verbose?: boolean,
+  ) {
+    if (!prompt) return { error: 'Prompt is required' };
+
+    const threadId = existingThreadId || uuidv4();
+    try {
+      const result = await this.aiService.startAffiliateResearch(
+        threadId,
+        prompt,
+        { verbose: Boolean(verbose) },
+      );
+      return { ...result, threadId };
+    } catch (e) {
+      return { error: 'Affiliate research failed', details: e.message };
+    }
+  }
+
+  @Post('affiliate-research/stream')
+  @HttpCode(HttpStatus.OK)
+  async affiliateResearchStream(
+    @Body('prompt') prompt: string,
+    @Body('threadId') existingThreadId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.handleAffiliateStream(prompt, existingThreadId, req, res);
+  }
+
+  @Get('affiliate-research/stream')
+  async affiliateResearchStreamGet(
+    @Query('prompt') prompt: string,
+    @Query('threadId') existingThreadId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.handleAffiliateStream(prompt, existingThreadId, req, res);
+  }
+
+  private async handleAffiliateStream(
+    prompt: string,
+    existingThreadId: string | undefined,
+    req: Request,
+    res: Response,
+  ) {
+    if (!prompt) {
+      res.statusCode = HttpStatus.BAD_REQUEST;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Prompt is required' }));
+      return;
+    }
+
+    const threadId = existingThreadId || uuidv4();
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const abortController = new AbortController();
+    let isClosed = false;
+
+    req.on('close', () => {
+      isClosed = true;
+      abortController.abort();
+    });
+
+    const writeEvent = (event: string, data: Record<string, unknown>) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    writeEvent('status', { message: 'Stream connected', threadId });
+
+    try {
+      for await (const event of this.aiService.streamAffiliateResearch(
+        threadId,
+        prompt,
+        { tokenMode: 'char', signal: abortController.signal },
+      )) {
+        if (isClosed) break;
+        writeEvent(event.type, event.data);
+      }
+    } catch (error) {
+      const err = error as Error;
+      writeEvent('error', { message: err.message });
+    } finally {
+      res.end();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   private async handleResearchStream(
     domain: string,
     prompt: string,

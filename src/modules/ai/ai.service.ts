@@ -4,10 +4,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ChatOllama } from '@langchain/ollama';
 import { createResearchGraph } from './workflows/research.graph';
+import { createAffiliateGraph } from './workflows/affiliate.graph';
 import { HumanMessage } from '@langchain/core/messages';
 import { staticTools } from './tools';
 import { createSaveDataTool } from './tools/save-data.tool';
 import { createReadDataTool } from './tools/read-data.tool';
+import { webSearchDDGTool } from './tools/web-search-ddg.tool';
+import { webScraperTool } from './tools/web-scraper.tool';
+import { parseHtmlToStructuredTool } from './tools/html-to-rsm-json.tool';
 import { ResearchData } from './entities/research-data.entity';
 import { RagService } from '../rag/rag.service';
 type StreamEvent = {
@@ -234,6 +238,168 @@ export class AiService {
     const saveDataTool = createSaveDataTool(this.researchDataRepo);
     const readDataTool = createReadDataTool(this.researchDataRepo);
     return [...staticTools, saveDataTool, readDataTool];
+  }
+
+  private getAffiliateApp() {
+    const saveDataTool = createSaveDataTool(this.researchDataRepo);
+    const readDataTool = createReadDataTool(this.researchDataRepo);
+    const tools = [
+      webSearchDDGTool,
+      webScraperTool,
+      parseHtmlToStructuredTool,
+      saveDataTool,
+      readDataTool,
+    ];
+    return createAffiliateGraph(this.llm, { tools });
+  }
+
+  // Affiliate & pricing research — DDG search → scrape → parse HTML → extract
+  async *streamAffiliateResearch(
+    threadId: string,
+    prompt: string,
+    options?: { tokenMode?: 'chunk' | 'char'; signal?: AbortSignal },
+  ): AsyncGenerator<
+    | { type: 'status'; data: Record<string, unknown> }
+    | { type: 'tool'; data: Record<string, unknown> }
+    | { type: 'token'; data: Record<string, unknown> }
+    | { type: 'final'; data: Record<string, unknown> }
+    | { type: 'error'; data: Record<string, unknown> }
+  > {
+    const tokenMode = options?.tokenMode ?? 'char';
+    const startedAt = Date.now();
+    this.logEvent(threadId, `[Affiliate] Start: ${prompt}`);
+
+    const ragContext = await this.ragService.getActiveContext();
+    yield {
+      type: 'status',
+      data: { message: 'RAG context loaded', ragChars: ragContext.length },
+    };
+
+    const affiliateApp = this.getAffiliateApp();
+
+    const initialState = {
+      messages: [new HumanMessage(prompt)],
+      goal: prompt,
+      ragContext,
+    };
+
+    const toolStats: Record<string, number> = {};
+    let finalAnswer = '';
+
+    try {
+      const eventStream = affiliateApp.streamEvents(initialState, {
+        configurable: { thread_id: threadId },
+        signal: options?.signal,
+        version: 'v2',
+      });
+
+      for await (const event of eventStream) {
+        const streamEvent = event as StreamEvent;
+        const eventName = streamEvent.event;
+
+        if (eventName === 'on_tool_start') {
+          const toolName = streamEvent.name || 'unknown';
+          toolStats[toolName] = (toolStats[toolName] ?? 0) + 1;
+          this.logEvent(threadId, `Tool start: ${toolName}`);
+          yield {
+            type: 'tool',
+            data: {
+              phase: 'start',
+              tool: toolName,
+              input: this.summarizeValue(streamEvent.data?.input),
+            },
+          };
+          continue;
+        }
+
+        if (eventName === 'on_tool_end') {
+          const toolName = streamEvent.name || 'unknown';
+          this.logEvent(threadId, `Tool end: ${toolName}`);
+          yield {
+            type: 'tool',
+            data: {
+              phase: 'end',
+              tool: toolName,
+              output: this.summarizeValue(streamEvent.data?.output),
+            },
+          };
+          continue;
+        }
+
+        if (
+          eventName === 'on_chat_model_stream' ||
+          eventName === 'on_llm_stream'
+        ) {
+          const chunkText = this.extractChunkText(streamEvent.data?.chunk);
+          if (!chunkText) continue;
+          finalAnswer += chunkText;
+          if (tokenMode === 'char') {
+            for (const char of chunkText) {
+              yield { type: 'token', data: { value: char } };
+            }
+          } else {
+            yield { type: 'token', data: { value: chunkText } };
+          }
+          continue;
+        }
+      }
+
+      const durationMs = Date.now() - startedAt;
+      this.logEvent(threadId, `Completed in ${this.formatDuration(durationMs)}`);
+      yield {
+        type: 'final',
+        data: {
+          message: 'Affiliate research complete',
+          threadId,
+          durationMs,
+          toolsUsed: Object.entries(toolStats).map(([tool, count]) => ({
+            tool,
+            count,
+          })),
+          answer: finalAnswer.trim(),
+        },
+      };
+    } catch (error) {
+      if (options?.signal?.aborted) {
+        this.logEvent(threadId, 'Stream aborted by client');
+        return;
+      }
+      const err = error as Error;
+      this.logEvent(threadId, `Failed: ${err.message}`);
+      yield { type: 'error', data: { message: err.message } };
+    }
+  }
+
+  async startAffiliateResearch(
+    threadId: string,
+    prompt: string,
+    options?: { verbose?: boolean },
+  ) {
+    const startedAt = Date.now();
+    const verbose = options?.verbose ?? false;
+    const events: Array<Record<string, unknown>> = [];
+    let answer = '';
+    let finalMeta: Record<string, unknown> = {};
+
+    for await (const event of this.streamAffiliateResearch(threadId, prompt, {
+      tokenMode: 'chunk',
+    })) {
+      if (event.type === 'token') {
+        answer += String(event.data.value ?? '');
+      } else if (event.type === 'final') {
+        finalMeta = event.data;
+      }
+      if (verbose) events.push(event);
+    }
+
+    return {
+      message: 'Affiliate research complete',
+      threadId,
+      durationMs: Date.now() - startedAt,
+      answer: answer.trim(),
+      toolsUsed: (finalMeta.toolsUsed as unknown) ?? [],
+      ...(verbose ? { events } : {}),
+    };
   }
 
   // Trigger the LangGraph domain research workflow
