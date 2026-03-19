@@ -26,12 +26,22 @@ export function createSaveDataTool(repository: Repository<ResearchData>) {
         }
 
         if (existing) {
+          const isSame = JSON.stringify(existing.value) === JSON.stringify(valueToSave);
+
+          if (isSame) {
+            return JSON.stringify({
+              success: true,
+              action: 'skipped',
+              reason: 'duplicate',
+            });
+          }
+
           existing.value = valueToSave;
           await repository.save(existing);
+
           return JSON.stringify({
             success: true,
             action: 'updated',
-            id: existing.id,
           });
         }
 

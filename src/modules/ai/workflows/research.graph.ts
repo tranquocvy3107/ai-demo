@@ -2,21 +2,16 @@ import {
   StateGraph,
   START,
   END,
-  MemorySaver,
   Annotation,
 } from '@langchain/langgraph';
 import {
   BaseMessage,
-  HumanMessage,
-  SystemMessage,
   AIMessage,
 } from '@langchain/core/messages';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { ChatOllama } from '@langchain/ollama';
 import { StructuredToolInterface } from '@langchain/core/tools';
-import { buildSystemPrompt } from '../agents/prompts';
 
-// 1. Define the State
 export const ResearchState = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
     reducer: (x, y) => x.concat(y),
@@ -39,40 +34,28 @@ export function createResearchGraph(
   options: ResearchGraphOptions,
 ) {
   const { tools } = options;
-
-  // Bind tools to the LLM
   const llmWithTools = llm.bindTools(tools);
 
-  // 2. Define the Agent Node
   const callModel = async (state: typeof ResearchState.State) => {
-    const { messages, domain, goal, ragContext } = state;
-
-    // System prompt is now injected at the start in AiService
-    const inputMessages = messages;
-
-    const response = await llmWithTools.invoke(inputMessages);
+    const { messages } = state;
+    const response = await llmWithTools.invoke(messages);
     return { messages: [response] };
   };
 
-  // 3. Define the conditional edge for routing
   const shouldContinue = (state: typeof ResearchState.State) => {
     const { messages } = state;
-    const lastMessage = messages[messages.length - 1];
-
-    // If there are no tool calls, the LLM has finished reasoning
-    if (
-      !lastMessage.additional_kwargs.tool_calls &&
-      !(lastMessage as AIMessage).tool_calls?.length
-    ) {
+    const lastMessage = messages[messages.length - 1] as AIMessage;
+    if (!lastMessage.additional_kwargs.tool_calls && !lastMessage.tool_calls?.length) {
       return END;
     }
-    // Otherwise, route to tools
     return 'tools';
   };
 
   const toolNode = new ToolNode(tools);
 
-  // 4. Construct the Graph
+  // We intentionally remove MemorySaver checkpointer here.
+  // Instead, the AI memory is handled as a summary step in AiService using AgentMemory entity.
+  // This prevents context-overflow problems when processing long and complicated tasks.
   const workflow = new StateGraph(ResearchState)
     .addNode('agent', callModel)
     .addNode('tools', toolNode)
@@ -80,7 +63,5 @@ export function createResearchGraph(
     .addConditionalEdges('agent', shouldContinue)
     .addEdge('tools', 'agent');
 
-  // We use MemorySaver to persist state across thread calls
-  const memory = new MemorySaver();
-  return workflow.compile({ checkpointer: memory });
+  return workflow.compile();
 }

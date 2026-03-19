@@ -2,7 +2,7 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
 
-const MAX_CONTENT_LENGTH = 6000;
+const MAX_CONTENT_LENGTH = 8000; // Tăng lên 8k để AI có nhiều context hơn
 
 export const webScraperTool = tool(
   async ({ url, selector, extractLinks }) => {
@@ -35,12 +35,12 @@ export const webScraperTool = tool(
         'script, style, nav, footer, header, iframe, noscript, svg, img, [role="banner"], [role="navigation"], .cookie-banner, .popup',
       ).remove();
 
-      // Extract page metadata
+      // Extract metadata
       const title = $('title').text().trim();
       const metaDescription =
         $('meta[name="description"]').attr('content') || '';
 
-      // Extract content based on selector or default to main content
+      // Tối ưu hóa việc bóc tách nội dung chính
       let content = '';
       if (selector) {
         content = $(selector)
@@ -48,7 +48,7 @@ export const webScraperTool = tool(
           .get()
           .join('\n\n');
       } else {
-        // Try common content containers, fall back to body
+        // Tự động tìm kiếm các thẻ chứa nội dung quan trọng
         const contentSelectors = [
           'main',
           'article',
@@ -58,52 +58,64 @@ export const webScraperTool = tool(
           '.post-content',
           '.entry-content',
         ];
-        let found = false;
+        let foundContent = false;
         for (const sel of contentSelectors) {
           const el = $(sel);
-          if (el.length > 0 && el.text().trim().length > 100) {
+          if (el.length > 0 && el.text().trim().length > 150) {
             content = el.text().trim();
-            found = true;
+            foundContent = true;
             break;
           }
         }
-        if (!found) {
+        if (!foundContent) {
           content = $('body').text().trim();
         }
       }
 
-      // Clean up whitespace
-      content = content.replace(/\s+/g, ' ').replace(/\n\s*\n/g, '\n');
+      // Xử lý làm sạch văn bản: xóa khoảng trắng thừa, xóa dòng rỗng
+      content = content
+        .replace(/\t/g, ' ')
+        .replace(/ {2,}/g, ' ')
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 5) // Chỉ giữ các dòng có nội dung thực sự
+        .join('\n');
 
-      // Extract links if requested
+      // Tối ưu hóa việc trích xuất liên kết: Chỉ lấy các link tiềm năng
       let links: Array<{ text: string; href: string }> = [];
       if (extractLinks) {
         const baseUrl = new URL(url);
         $('a[href]').each((_, el) => {
           const href = $(el).attr('href') || '';
-          const text = $(el).text().trim();
+          const text = $(el).text().trim().substring(0, 100);
           if (text && href && !href.startsWith('#') && !href.startsWith('javascript:')) {
             let fullUrl = href;
-            if (href.startsWith('/')) {
-              fullUrl = `${baseUrl.protocol}//${baseUrl.host}${href}`;
+            try {
+              if (href.startsWith('/')) {
+                fullUrl = `${baseUrl.origin}${href}`;
+              } else if (!href.startsWith('http')) {
+                fullUrl = new URL(href, baseUrl.origin).toString();
+              }
+            } catch (e) {
+              // ignore invalid URLs
             }
-            links.push({ text: text.substring(0, 100), href: fullUrl });
+            links.push({ text, href: fullUrl });
           }
         });
 
-        // Dedupe and limit
-        const seen = new Set<string>();
-        links = links.filter((l) => {
-          if (seen.has(l.href)) return false;
-          seen.add(l.href);
-          return true;
-        }).slice(0, 50);
+        // Chỉ ưu tiên các links liên quan đến pricing/affiliate/about
+        const priorityKeywords = ['affiliate', 'pricing', 'partner', 'plan', 'price', '/sign-up', '/register'];
+        links = links.filter((l, index, self) => 
+            self.findIndex(t => t.href === l.href) === index // Deduplicate
+        ).sort((a,b) => {
+            const aHas = priorityKeywords.some(kw => a.href.toLowerCase().includes(kw) || a.text.toLowerCase().includes(kw));
+            const bHas = priorityKeywords.some(kw => b.href.toLowerCase().includes(kw) || b.text.toLowerCase().includes(kw));
+            return aHas === bHas ? 0 : aHas ? -1 : 1;
+        }).slice(0, 30);
       }
 
-      // Truncate content
       if (content.length > MAX_CONTENT_LENGTH) {
-        content =
-          content.substring(0, MAX_CONTENT_LENGTH) +
+        content = content.substring(0, MAX_CONTENT_LENGTH) +
           `\n...[TRUNCATED, total ${content.length} chars]`;
       }
 
@@ -117,29 +129,17 @@ export const webScraperTool = tool(
     } catch (error) {
       return JSON.stringify({
         error: true,
-        message:
-          error instanceof Error ? error.message : 'Unknown error occurred',
+        message: error instanceof Error ? error.message : 'Unknown error during scraping',
       });
     }
   },
   {
     name: 'web_scraper',
-    description:
-      'Scrapes a web page and extracts readable text content. Use this to read the full content of a page, extract specific sections with CSS selectors, or discover all links on a page. Good for reading affiliate program details, pricing pages, terms, etc.',
+    description: 'Scrapes a web page to extract readable text content. Can also extract all links (prioritizing affiliate/pricing links). Use this to read page details or discover signup pages.',
     schema: z.object({
-      url: z.string().describe('The full URL of the page to scrape'),
-      selector: z
-        .string()
-        .optional()
-        .describe(
-          'Optional CSS selector to extract specific elements (e.g. ".pricing-table", "#affiliate-info", "article")',
-        ),
-      extractLinks: z
-        .boolean()
-        .optional()
-        .describe(
-          'If true, also extracts all links from the page. Useful for discovering affiliate signup pages, subpages, etc.',
-        ),
+      url: z.string().describe('The full URL of the page'),
+      selector: z.string().optional().describe('Optional CSS selector'),
+      extractLinks: z.boolean().optional().describe('If true, discover links in prioritized order'),
     }),
-  },
+  }
 );

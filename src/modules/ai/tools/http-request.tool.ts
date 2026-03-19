@@ -1,7 +1,7 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 
-const MAX_BODY_LENGTH = 4000;
+const MAX_BODY_LENGTH = 10000; // Tăng kịch trần 10k để AI tha hồ bóc tách API response
 
 export const httpRequestTool = tool(
   async ({ url, method, headers, body }) => {
@@ -38,6 +38,14 @@ export const httpRequestTool = tool(
         responseBody = await response.text();
       }
 
+      // Tối ưu: Nếu là HTML thì strip bớt noise bằng Regex đơn giản trước khi trả về
+      if (contentType.includes('text/html')) {
+        responseBody = responseBody
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<svg[\s\S]*?<\/svg>/gi, '');
+      }
+
       // Truncate if too long for LLM context
       if (responseBody.length > MAX_BODY_LENGTH) {
         responseBody =
@@ -54,29 +62,18 @@ export const httpRequestTool = tool(
     } catch (error) {
       return JSON.stringify({
         error: true,
-        message:
-          error instanceof Error ? error.message : 'Unknown error occurred',
+        message: error instanceof Error ? error.message : 'Unknown error occurred',
       });
     }
   },
   {
     name: 'http_request',
-    description:
-      'Makes an HTTP request to any URL. Use this to check if a domain is alive, call APIs, or fetch raw data. Supports GET, POST, PUT, DELETE methods.',
+    description: 'Makes an HTTP request. Use this to check domains, call APIs, or fetch raw data. Supports GET, POST, PUT, DELETE.',
     schema: z.object({
-      url: z.string().describe('The full URL to request, e.g. https://example.com'),
-      method: z
-        .enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD'])
-        .default('GET')
-        .describe('HTTP method'),
-      headers: z
-        .string()
-        .optional()
-        .describe('Optional JSON string of additional headers'),
-      body: z
-        .string()
-        .optional()
-        .describe('Optional request body (for POST/PUT/PATCH)'),
+      url: z.string().describe('The full URL, e.g. https://example.com'),
+      method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD']).default('GET'),
+      headers: z.string().optional().describe('Optional JSON string of headers'),
+      body: z.string().optional().describe('Optional request body'),
     }),
   },
 );
