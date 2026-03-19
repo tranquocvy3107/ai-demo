@@ -4,11 +4,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ChatOllama } from '@langchain/ollama';
 import { createResearchGraph } from './workflows/research.graph';
-import { HumanMessage } from '@langchain/core/messages';
+import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { staticTools } from './tools';
 import { createSaveDataTool } from './tools/save-data.tool';
 import { createReadDataTool } from './tools/read-data.tool';
+import { createSemrushTrafficTool } from './tools/semrush-traffic.tool';
+import { buildSystemPrompt } from './agents/prompts';
 import { ResearchData } from './entities/research-data.entity';
+import { SemrushTraffic } from './entities/semrush-traffic.entity';
 import { RagService } from '../rag/rag.service';
 type StreamEvent = {
   event: string;
@@ -29,6 +32,8 @@ export class AiService {
     private configService: ConfigService,
     @InjectRepository(ResearchData)
     private researchDataRepo: Repository<ResearchData>,
+    @InjectRepository(SemrushTraffic)
+    private semrushTrafficRepo: Repository<SemrushTraffic>,
     private ragService: RagService,
   ) {
     const baseUrl = this.configService.get<string>('ai.ollamaBaseUrl');
@@ -94,6 +99,46 @@ export class AiService {
     return `${text.slice(0, maxLength)}...`;
   }
 
+  private stripThinking(text: string): string {
+    if (!text) return '';
+    // Remove <think>...</think> blocks and common "Thought:" prefixes
+    let output = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    output = output.replace(/^(\s*Thoughts?:\s*)/gi, '');
+    return output.trimStart();
+  }
+
+  private stripThinkingFromChunk(
+    chunk: string,
+    state: { inThink: boolean },
+  ): string {
+    if (!chunk) return '';
+    let result = '';
+    let remaining = chunk;
+
+    while (remaining.length > 0) {
+      if (state.inThink) {
+        const endIdx = remaining.toLowerCase().indexOf('</think>');
+        if (endIdx === -1) {
+          return result;
+        }
+        remaining = remaining.slice(endIdx + '</think>'.length);
+        state.inThink = false;
+        continue;
+      }
+
+      const startIdx = remaining.toLowerCase().indexOf('<think>');
+      if (startIdx === -1) {
+        result += remaining;
+        return result;
+      }
+      result += remaining.slice(0, startIdx);
+      remaining = remaining.slice(startIdx + '<think>'.length);
+      state.inThink = true;
+    }
+
+    return result;
+  }
+
   private formatDuration(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
     const seconds = Math.round(ms / 100) / 10;
@@ -131,8 +176,9 @@ export class AiService {
 
     const researchApp = this.getResearchApp();
 
+    const systemPrompt = buildSystemPrompt({ domain, goal: prompt, ragContext });
     const initialState = {
-      messages: [new HumanMessage(prompt)],
+      messages: [new SystemMessage(systemPrompt), new HumanMessage(prompt)],
       domain,
       goal: prompt,
       ragContext,
@@ -140,6 +186,7 @@ export class AiService {
 
     const toolStats: Record<string, number> = {};
     let finalAnswer = '';
+    const thinkState = { inThink: false };
 
     try {
       const eventStream = researchApp.streamEvents(
@@ -178,7 +225,8 @@ export class AiService {
             data: {
               phase: 'end',
               tool: toolName,
-              output: this.summarizeValue(streamEvent.data?.output),
+              output: streamEvent.data?.output ?? null,
+              outputSummary: this.summarizeValue(streamEvent.data?.output),
             },
           };
           continue;
@@ -211,7 +259,7 @@ export class AiService {
             tool,
             count,
           })),
-          answer: finalAnswer.trim(),
+          answer: this.stripThinking(finalAnswer),
         },
       };
     } catch (error) {
@@ -229,7 +277,24 @@ export class AiService {
   private getAllTools() {
     const saveDataTool = createSaveDataTool(this.researchDataRepo);
     const readDataTool = createReadDataTool(this.researchDataRepo);
-    return [...staticTools, saveDataTool, readDataTool];
+    const semrushTool = createSemrushTrafficTool(this.semrushTrafficRepo, this.researchDataRepo);
+    return [...staticTools, saveDataTool, readDataTool, semrushTool];
+  }
+
+  // Run a single tool by name for quick testing
+  async runTool(toolName: string, input: Record<string, unknown>) {
+    const tools = this.getAllTools();
+    const tool = tools.find((t) => t.name === toolName);
+    if (!tool) {
+      throw new Error(`Tool not found: ${toolName}`);
+    }
+
+    const output = await (tool as any).invoke(input);
+    return {
+      tool: toolName,
+      input,
+      output,
+    };
   }
 
   // Trigger the LangGraph domain research workflow
@@ -263,14 +328,22 @@ export class AiService {
     }
 
     const durationMs = Date.now() - startedAt;
+    const finalAnswer = this.stripThinking(answer.trim());
+
+    if (!verbose) {
+      return {
+        response: finalAnswer,
+        threadId,
+      };
+    }
 
     return {
       message: 'Research complete',
       threadId,
       durationMs,
-      answer: answer.trim(),
+      answer: finalAnswer,
       toolsUsed: (finalMeta.toolsUsed as unknown) ?? [],
-      ...(verbose ? { events } : {}),
+      events,
     };
   }
 }

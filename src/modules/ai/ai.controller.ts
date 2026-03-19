@@ -50,6 +50,21 @@ export class AiController {
     }
   }
 
+  @Post('tools/run')
+  @HttpCode(HttpStatus.OK)
+  async runTool(
+    @Body('tool') tool: string,
+    @Body('input') input: Record<string, unknown>,
+  ) {
+    if (!tool) return { error: 'Tool name is required' };
+    try {
+      const result = await this.aiService.runTool(tool, input || {});
+      return result;
+    } catch (e) {
+      return { error: 'Tool run failed', details: e.message };
+    }
+  }
+
   @Post('research-domain/stream')
   @HttpCode(HttpStatus.OK)
   async researchDomainStream(

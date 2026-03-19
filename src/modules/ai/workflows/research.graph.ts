@@ -47,13 +47,8 @@ export function createResearchGraph(
   const callModel = async (state: typeof ResearchState.State) => {
     const { messages, domain, goal, ragContext } = state;
 
-    // If it's the first message, inject the system prompt with RAG context
-    let inputMessages = messages;
-    if (messages.length === 1) {
-      const systemPrompt = buildSystemPrompt({ domain, goal, ragContext });
-      const systemMessage = new SystemMessage(systemPrompt);
-      inputMessages = [systemMessage, ...messages];
-    }
+    // System prompt is now injected at the start in AiService
+    const inputMessages = messages;
 
     const response = await llmWithTools.invoke(inputMessages);
     return { messages: [response] };

@@ -18,9 +18,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           database: dbConfig.name,
           entities: [__dirname + '/../**/*.entity{.ts,.js}'],
           migrations: [__dirname + '/migrations/*{.ts,.js}'],
-          synchronize: process.env.NODE_ENV === 'development',
+          synchronize: process.env.NODE_ENV !== 'production',
           autoLoadEntities: true,
-          logging: process.env.NODE_ENV === 'development',
+          logging: process.env.NODE_ENV !== 'production',
         };
       },
     }),
