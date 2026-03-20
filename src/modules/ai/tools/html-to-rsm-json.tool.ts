@@ -6,6 +6,42 @@ import type { AnyNode, Element } from 'domhandler';
 // Max markdown length before truncation
 const MAX_MARKDOWN_LENGTH = 12000;
 const MAX_LINKS = 80;
+const description = `
+Convert raw HTML into structured, readable Markdown for analysis.
+
+Use this tool after web_scraper to transform HTML into a format that is easy to read and reason about.
+
+Input:
+- html: string (required) — cleaned HTML content from web_scraper
+- url: string (required) — base URL of the page
+
+Output:
+- JSON object with:
+  - success: boolean
+  - url: string
+  - title: string
+  - metaDescription: string
+  - markdown: string (full page content converted to Markdown)
+  - links: array of:
+    - text: string (anchor text)
+    - url: string (absolute URL)
+  - jsonLd: array (structured schema.org data if present)
+  - truncated: boolean (true if content was shortened)
+
+Behavior:
+- Converts full HTML into Markdown (headings, paragraphs, lists, tables, links preserved)
+- Keeps all visible content — nothing is filtered out
+- Extracts all links for navigation and follow-up scraping
+- Extracts JSON-LD structured data (often contains pricing, product, or affiliate info)
+- Truncates content if too long, with a note indicating how to refine extraction
+
+Rules:
+- Always use this tool immediately after web_scraper
+- Do NOT analyze raw HTML directly — always convert to Markdown first
+- Use markdown content to classify the page and extract data
+- Use links to discover pricing, affiliate, or related pages
+- Prefer jsonLd data when available, as it is the most reliable structured source
+`;
 
 // ===== HTML → MARKDOWN =====
 // Converts cleaned HTML into readable markdown so the LLM sees all content.
@@ -20,17 +56,22 @@ function nodeToMarkdown($: cheerio.CheerioAPI, node: AnyNode): string {
 
   const el = node as Element;
   const tag = el.tagName?.toLowerCase() ?? '';
-  const children = () =>
-    el.children.map((c) => nodeToMarkdown($, c)).join('');
+  const children = () => el.children.map((c) => nodeToMarkdown($, c)).join('');
 
   switch (tag) {
     // Headings
-    case 'h1': return `\n# ${children().trim()}\n`;
-    case 'h2': return `\n## ${children().trim()}\n`;
-    case 'h3': return `\n### ${children().trim()}\n`;
-    case 'h4': return `\n#### ${children().trim()}\n`;
-    case 'h5': return `\n##### ${children().trim()}\n`;
-    case 'h6': return `\n###### ${children().trim()}\n`;
+    case 'h1':
+      return `\n# ${children().trim()}\n`;
+    case 'h2':
+      return `\n## ${children().trim()}\n`;
+    case 'h3':
+      return `\n### ${children().trim()}\n`;
+    case 'h4':
+      return `\n#### ${children().trim()}\n`;
+    case 'h5':
+      return `\n##### ${children().trim()}\n`;
+    case 'h6':
+      return `\n###### ${children().trim()}\n`;
 
     // Block elements
     case 'p':
@@ -46,16 +87,22 @@ function nodeToMarkdown($: cheerio.CheerioAPI, node: AnyNode): string {
 
     // Lists
     case 'ul':
-    case 'ol': return `\n${children()}\n`;
-    case 'li': return `\n- ${children().trim()}`;
+    case 'ol':
+      return `\n${children()}\n`;
+    case 'li':
+      return `\n- ${children().trim()}`;
 
     // Inline elements
     case 'strong':
-    case 'b': return `**${children()}**`;
+    case 'b':
+      return `**${children()}**`;
     case 'em':
-    case 'i': return `_${children()}_`;
-    case 'code': return `\`${children()}\``;
-    case 'pre': return `\n\`\`\`\n${children()}\n\`\`\`\n`;
+    case 'i':
+      return `_${children()}_`;
+    case 'code':
+      return `\`${children()}\``;
+    case 'pre':
+      return `\n\`\`\`\n${children()}\n\`\`\`\n`;
 
     // Links — keep inline so LLM sees URL in context
     case 'a': {
@@ -66,11 +113,14 @@ function nodeToMarkdown($: cheerio.CheerioAPI, node: AnyNode): string {
     }
 
     // Line break
-    case 'br': return '\n';
-    case 'hr': return '\n---\n';
+    case 'br':
+      return '\n';
+    case 'hr':
+      return '\n---\n';
 
     // Tables → markdown table
-    case 'table': return tableToMarkdown($, el);
+    case 'table':
+      return tableToMarkdown($, el);
 
     // Skip entirely — these are noise even after web_scraper cleanup
     case 'script':
@@ -82,7 +132,8 @@ function nodeToMarkdown($: cheerio.CheerioAPI, node: AnyNode): string {
       return '';
 
     // Span and unknown inline tags — just render children
-    default: return children();
+    default:
+      return children();
   }
 }
 
@@ -124,7 +175,13 @@ function extractLinks(
 
   $('a[href]').each((_, el) => {
     let href = $(el).attr('href') || '';
-    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.includes('mailto:')) return;
+    if (
+      !href ||
+      href.startsWith('#') ||
+      href.startsWith('javascript:') ||
+      href.includes('mailto:')
+    )
+      return;
 
     try {
       href = new URL(href, baseUrl).href;
@@ -203,11 +260,12 @@ export const parseHtmlToStructuredTool = tool(
   },
   {
     name: 'parse_html_structured',
-    description:
-      'Converts cleaned HTML (from web_scraper) into readable Markdown so the LLM can review all page content without losing information. Returns: full page as markdown (headings, tables, lists, inline links, bold text all preserved), a deduplicated links list for follow-up scraping, and raw JSON-LD schema.org data (most reliable source for prices and product info). Nothing is filtered out — the LLM decides what is relevant. If truncated, a note is appended with instructions to target a specific section.',
+    description,
     schema: z.object({
       html: z.string().describe('Cleaned HTML returned by web_scraper'),
-      url: z.string().describe('Base URL of the page for resolving relative links'),
+      url: z
+        .string()
+        .describe('Base URL of the page for resolving relative links'),
     }),
   },
 );

@@ -37,410 +37,343 @@ export class AiService {
   ) {
     const baseUrl = this.configService.get<string>('ai.ollamaBaseUrl');
 
-    // Initialize the base LLM
     this.llm = new ChatOllama({
       baseUrl,
       model: 'qwen2.5:7b',
       temperature: 0,
+      numCtx: 8000,
     });
   }
 
-  // Standalone chat API
-  async generateResponse(prompt: string): Promise<string> {
-    const response = await this.llm.invoke(prompt);
-    return response.content as string;
+  private formatThinking(text: string) {
+    return text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join('\n  ');
   }
+  // =========================================================
+  // BASIC API
+  // =========================================================
+
+  async generateResponse(prompt: string): Promise<string> {
+    const res = await this.llm.invoke(prompt);
+    return res.content as string;
+  }
+
+  // =========================================================
+  // GRAPH BUILDERS
+  // =========================================================
 
   private getResearchApp() {
-    const tools = this.getAllTools();
-    return createResearchGraph(this.llm, { tools });
+    console.log('');
+    return createResearchGraph(this.llm, {
+      tools: this.getAllTools(),
+    });
   }
 
-  private extractChunkText(chunk: unknown): string {
-    if (!chunk) return '';
-    if (typeof chunk === 'string') return chunk;
+  private getAffiliateApp() {
+    const save = createSaveDataTool(this.researchDataRepo);
+    const read = createReadDataTool(this.researchDataRepo);
 
-    if (typeof chunk === 'object' && chunk !== null) {
-      const typedChunk = chunk as { content?: unknown; text?: unknown };
-      if (typeof typedChunk.content === 'string') return typedChunk.content;
-      if (Array.isArray(typedChunk.content)) {
-        return typedChunk.content
-          .map((item) => {
-            if (typeof item === 'string') return item;
-            if (item && typeof item === 'object') {
-              const typedItem = item as { text?: unknown; content?: unknown };
-              if (typeof typedItem.text === 'string') return typedItem.text;
-              if (typeof typedItem.content === 'string')
-                return typedItem.content;
-            }
-            return '';
-          })
-          .join('');
-      }
-      if (typeof typedChunk.text === 'string') return typedChunk.text;
-    }
-
-    return '';
+    return createAffiliateGraph(this.llm, {
+      tools: [
+        webSearchDDGTool,
+        webScraperTool,
+        parseHtmlToStructuredTool,
+        save,
+        read,
+      ],
+    });
   }
 
-  private summarizeValue(value: unknown, maxLength = 300): string {
-    if (value === null || value === undefined) return '';
-    let text: string;
-    if (typeof value === 'string') {
-      text = value;
-    } else {
-      try {
-        text = JSON.stringify(value);
-      } catch {
-        text = String(value);
-      }
-    }
-    if (text.length <= maxLength) return text;
-    return `${text.slice(0, maxLength)}...`;
+  private getAllTools() {
+    const save = createSaveDataTool(this.researchDataRepo);
+    const read = createReadDataTool(this.researchDataRepo);
+    return [...staticTools, save, read];
   }
 
-  private formatDuration(ms: number): string {
+  // =========================================================
+  // STREAM CORE (REUSABLE)
+  // =========================================================
+
+  private formatDuration(ms: number) {
     if (ms < 1000) return `${ms}ms`;
-    const seconds = Math.round(ms / 100) / 10;
-    return `${seconds}s`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  private async *handleStream({
+    threadId,
+    app,
+    initialState,
+    label,
+    options,
+  }: {
+    threadId: string;
+    app: any;
+    initialState: any;
+    label: string;
+    options?: { tokenMode?: 'chunk' | 'char'; signal?: AbortSignal };
+  }) {
+    const tokenMode = options?.tokenMode ?? 'char';
+    const startedAt = Date.now();
+
+    this.log(threadId, `[${label}] Start`);
+
+    const toolStats: Record<string, number> = {};
+    let finalAnswer = '';
+
+    // 🧠 buffer để bắt THINKING
+    let thinkingBuffer = '';
+
+    try {
+      const stream = app.streamEvents(initialState, {
+        configurable: { thread_id: threadId },
+        signal: options?.signal,
+        version: 'v2',
+      });
+
+      for await (const event of stream) {
+        const e = event as StreamEvent;
+
+        // ===== TOOL START =====
+        if (e.event === 'on_tool_start') {
+          const name = e.name || 'unknown';
+          toolStats[name] = (toolStats[name] ?? 0) + 1;
+
+          this.log(threadId, `🛠️ Tool start: ${name}`);
+
+          yield {
+            type: 'tool',
+            data: {
+              phase: 'start',
+              tool: name,
+              input: this.summarize(e.data?.input),
+            },
+          };
+          continue;
+        }
+
+        // ===== TOOL END =====
+        if (e.event === 'on_tool_end') {
+          this.log(threadId, `✅ Tool end: ${e.name}`);
+
+          yield {
+            type: 'tool',
+            data: {
+              phase: 'end',
+              tool: e.name || 'unknown',
+              output: this.summarize(e.data?.output),
+            },
+          };
+          continue;
+        }
+
+        // ===== TOKEN STREAM =====
+        if (e.event === 'on_chat_model_stream' || e.event === 'on_llm_stream') {
+          const text = this.extractChunk(e.data?.chunk);
+          if (!text) continue;
+
+          finalAnswer += text;
+
+          // ================================
+          // 🧠 CAPTURE THINKING BLOCK
+          // ================================
+          thinkingBuffer += text;
+
+          if (thinkingBuffer.includes('[THINKING]')) {
+            const parts = thinkingBuffer.split('[THINKING]');
+            thinkingBuffer = parts.pop() || '';
+
+            for (const block of parts) {
+              const cleaned = block.trim();
+              if (!cleaned) continue;
+
+              const formatted = this.formatThinking(cleaned);
+
+              this.log(threadId, `🧠 THINKING:\n${formatted}`);
+
+              yield {
+                type: 'thinking',
+                data: { text: formatted },
+              };
+            }
+          }
+
+          // ===== NORMAL TOKEN =====
+          if (tokenMode === 'char') {
+            for (const c of text) {
+              yield { type: 'token', data: { value: c } };
+            }
+          } else {
+            yield { type: 'token', data: { value: text } };
+          }
+        }
+      }
+
+      const durationMs = Date.now() - startedAt;
+
+      this.log(
+        threadId,
+        `[${label}] Done in ${this.formatDuration(durationMs)}`,
+      );
+
+      yield {
+        type: 'final',
+        data: {
+          message: `${label} complete`,
+          threadId,
+          durationMs,
+          toolsUsed: Object.entries(toolStats).map(([tool, count]) => ({
+            tool,
+            count,
+          })),
+          answer: finalAnswer.trim(),
+        },
+      };
+    } catch (err) {
+      if (options?.signal?.aborted) {
+        this.log(threadId, `[${label}] Aborted`);
+        return;
+      }
+
+      this.log(threadId, `[${label}] Error: ${(err as Error).message}`);
+
+      yield {
+        type: 'error',
+        data: { message: (err as Error).message },
+      };
+    }
   }
 
-  private logEvent(threadId: string, message: string) {
-    this.logger.log(`[Research:${threadId}] ${message}`);
-  }
+  // =========================================================
+  // DOMAIN STREAM
+  // =========================================================
 
   async *streamDomainResearch(
     threadId: string,
     domain: string,
     prompt: string,
     options?: { tokenMode?: 'chunk' | 'char'; signal?: AbortSignal },
-  ): AsyncGenerator<
-    | { type: 'status'; data: Record<string, unknown> }
-    | { type: 'tool'; data: Record<string, unknown> }
-    | { type: 'token'; data: Record<string, unknown> }
-    | { type: 'final'; data: Record<string, unknown> }
-    | { type: 'error'; data: Record<string, unknown> }
-  > {
-    const tokenMode = options?.tokenMode ?? 'char';
-    const startedAt = Date.now();
-    this.logEvent(threadId, `Start research for ${domain}`);
+  ) {
+    const rag = await this.ragService.getActiveContext();
 
-    const ragContext = await this.ragService.getActiveContext();
     yield {
       type: 'status',
-      data: {
-        message: 'RAG context loaded',
-        ragChars: ragContext.length,
+      data: { message: 'RAG loaded', ragChars: rag.length },
+    };
+
+    const app = this.getResearchApp();
+
+    yield* this.handleStream({
+      threadId,
+      app,
+      label: 'Research',
+      options,
+      initialState: {
+        messages: [new HumanMessage(prompt)],
+        domain,
+        goal: prompt,
+        ragContext: rag,
       },
-    };
-
-    const researchApp = this.getResearchApp();
-
-    const initialState = {
-      messages: [new HumanMessage(prompt)],
-      domain,
-      goal: prompt,
-      ragContext,
-    };
-
-    const toolStats: Record<string, number> = {};
-    let finalAnswer = '';
-
-    try {
-      const eventStream = researchApp.streamEvents(initialState, {
-        configurable: { thread_id: threadId },
-        signal: options?.signal,
-        version: 'v2',
-      });
-
-      for await (const event of eventStream) {
-        const streamEvent = event as StreamEvent;
-        const eventName = streamEvent.event;
-
-        if (eventName === 'on_tool_start') {
-          const toolName = streamEvent.name || 'unknown';
-          toolStats[toolName] = (toolStats[toolName] ?? 0) + 1;
-          this.logEvent(threadId, `Tool start: ${toolName}`);
-          yield {
-            type: 'tool',
-            data: {
-              phase: 'start',
-              tool: toolName,
-              input: this.summarizeValue(streamEvent.data?.input),
-            },
-          };
-          continue;
-        }
-
-        if (eventName === 'on_tool_end') {
-          const toolName = streamEvent.name || 'unknown';
-          this.logEvent(threadId, `Tool end: ${toolName}`);
-          yield {
-            type: 'tool',
-            data: {
-              phase: 'end',
-              tool: toolName,
-              output: this.summarizeValue(streamEvent.data?.output),
-            },
-          };
-          continue;
-        }
-
-        if (
-          eventName === 'on_chat_model_stream' ||
-          eventName === 'on_llm_stream'
-        ) {
-          const chunkText = this.extractChunkText(streamEvent.data?.chunk);
-          if (!chunkText) continue;
-          finalAnswer += chunkText;
-          if (tokenMode === 'char') {
-            for (const char of chunkText) {
-              yield { type: 'token', data: { value: char } };
-            }
-          } else {
-            yield { type: 'token', data: { value: chunkText } };
-          }
-          continue;
-        }
-      }
-
-      const durationMs = Date.now() - startedAt;
-      this.logEvent(
-        threadId,
-        `Completed in ${this.formatDuration(durationMs)}`,
-      );
-      yield {
-        type: 'final',
-        data: {
-          message: 'Research complete',
-          threadId,
-          durationMs,
-          toolsUsed: Object.entries(toolStats).map(([tool, count]) => ({
-            tool,
-            count,
-          })),
-          answer: finalAnswer.trim(),
-        },
-      };
-    } catch (error) {
-      if (options?.signal?.aborted) {
-        this.logEvent(threadId, 'Stream aborted by client');
-        return;
-      }
-      const err = error as Error;
-      this.logEvent(threadId, `Failed: ${err.message}`);
-      yield { type: 'error', data: { message: err.message } };
-    }
+    });
   }
 
-  // Build the full tool list including dynamic (DB-backed) tools
-  private getAllTools() {
-    const saveDataTool = createSaveDataTool(this.researchDataRepo);
-    const readDataTool = createReadDataTool(this.researchDataRepo);
-    return [...staticTools, saveDataTool, readDataTool];
-  }
+  // =========================================================
+  // AFFILIATE STREAM
+  // =========================================================
 
-  private getAffiliateApp() {
-    const saveDataTool = createSaveDataTool(this.researchDataRepo);
-    const readDataTool = createReadDataTool(this.researchDataRepo);
-    const tools = [
-      webSearchDDGTool,
-      webScraperTool,
-      parseHtmlToStructuredTool,
-      saveDataTool,
-      readDataTool,
-    ];
-    return createAffiliateGraph(this.llm, { tools });
-  }
-
-  // Affiliate & pricing research — DDG search → scrape → parse HTML → extract
   async *streamAffiliateResearch(
     threadId: string,
     prompt: string,
     options?: { tokenMode?: 'chunk' | 'char'; signal?: AbortSignal },
-  ): AsyncGenerator<
-    | { type: 'status'; data: Record<string, unknown> }
-    | { type: 'tool'; data: Record<string, unknown> }
-    | { type: 'token'; data: Record<string, unknown> }
-    | { type: 'final'; data: Record<string, unknown> }
-    | { type: 'error'; data: Record<string, unknown> }
-  > {
-    const tokenMode = options?.tokenMode ?? 'char';
-    const startedAt = Date.now();
-    this.logEvent(threadId, `[Affiliate] Start: ${prompt}`);
-
-    const ragContext = await this.ragService.getActiveContext();
+  ) {
+    const rag = await this.ragService.getActiveContext();
+    console.log('steeam affeliate rr');
     yield {
       type: 'status',
-      data: { message: 'RAG context loaded', ragChars: ragContext.length },
+      data: { message: 'RAG loaded', ragChars: rag.length },
     };
 
-    const affiliateApp = this.getAffiliateApp();
+    const app = this.getAffiliateApp();
 
-    const initialState = {
-      messages: [new HumanMessage(prompt)],
-      goal: prompt,
-      ragContext,
-    };
-
-    const toolStats: Record<string, number> = {};
-    let finalAnswer = '';
-
-    try {
-      const eventStream = affiliateApp.streamEvents(initialState, {
-        configurable: { thread_id: threadId },
-        signal: options?.signal,
-        version: 'v2',
-      });
-
-      for await (const event of eventStream) {
-        const streamEvent = event as StreamEvent;
-        const eventName = streamEvent.event;
-
-        if (eventName === 'on_tool_start') {
-          const toolName = streamEvent.name || 'unknown';
-          toolStats[toolName] = (toolStats[toolName] ?? 0) + 1;
-          this.logEvent(threadId, `Tool start: ${toolName}`);
-          yield {
-            type: 'tool',
-            data: {
-              phase: 'start',
-              tool: toolName,
-              input: this.summarizeValue(streamEvent.data?.input),
-            },
-          };
-          continue;
-        }
-
-        if (eventName === 'on_tool_end') {
-          const toolName = streamEvent.name || 'unknown';
-          this.logEvent(threadId, `Tool end: ${toolName}`);
-          yield {
-            type: 'tool',
-            data: {
-              phase: 'end',
-              tool: toolName,
-              output: this.summarizeValue(streamEvent.data?.output),
-            },
-          };
-          continue;
-        }
-
-        if (
-          eventName === 'on_chat_model_stream' ||
-          eventName === 'on_llm_stream'
-        ) {
-          const chunkText = this.extractChunkText(streamEvent.data?.chunk);
-          if (!chunkText) continue;
-          finalAnswer += chunkText;
-          if (tokenMode === 'char') {
-            for (const char of chunkText) {
-              yield { type: 'token', data: { value: char } };
-            }
-          } else {
-            yield { type: 'token', data: { value: chunkText } };
-          }
-          continue;
-        }
-      }
-
-      const durationMs = Date.now() - startedAt;
-      this.logEvent(threadId, `Completed in ${this.formatDuration(durationMs)}`);
-      yield {
-        type: 'final',
-        data: {
-          message: 'Affiliate research complete',
-          threadId,
-          durationMs,
-          toolsUsed: Object.entries(toolStats).map(([tool, count]) => ({
-            tool,
-            count,
-          })),
-          answer: finalAnswer.trim(),
-        },
-      };
-    } catch (error) {
-      if (options?.signal?.aborted) {
-        this.logEvent(threadId, 'Stream aborted by client');
-        return;
-      }
-      const err = error as Error;
-      this.logEvent(threadId, `Failed: ${err.message}`);
-      yield { type: 'error', data: { message: err.message } };
-    }
+    yield* this.handleStream({
+      threadId,
+      app,
+      label: 'Affiliate',
+      options,
+      initialState: {
+        messages: [new HumanMessage(prompt)],
+        goal: prompt,
+        ragContext: rag,
+      },
+    });
   }
 
-  async startAffiliateResearch(
-    threadId: string,
-    prompt: string,
-    options?: { verbose?: boolean },
-  ) {
-    const startedAt = Date.now();
-    const verbose = options?.verbose ?? false;
-    const events: Array<Record<string, unknown>> = [];
-    let answer = '';
-    let finalMeta: Record<string, unknown> = {};
+  // =========================================================
+  // WRAPPERS (NON-STREAM)
+  // =========================================================
 
-    for await (const event of this.streamAffiliateResearch(threadId, prompt, {
-      tokenMode: 'chunk',
-    })) {
-      if (event.type === 'token') {
-        answer += String(event.data.value ?? '');
-      } else if (event.type === 'final') {
-        finalMeta = event.data;
-      }
-      if (verbose) events.push(event);
+  async startAffiliateResearch(threadId: string, prompt: string) {
+    console.log('start testing affeliate ');
+    return this.collectStream(
+      this.streamAffiliateResearch(threadId, prompt, { tokenMode: 'chunk' }),
+    );
+  }
+
+  async startDomainResearch(threadId: string, domain: string, prompt: string) {
+    return this.collectStream(
+      this.streamDomainResearch(threadId, domain, prompt, {
+        tokenMode: 'chunk',
+      }),
+    );
+  }
+
+  private async collectStream(stream: AsyncGenerator<any>) {
+    const startedAt = Date.now();
+    let answer = '';
+    let meta: any = {};
+
+    for await (const e of stream) {
+      if (e.type === 'token') answer += e.data.value;
+      if (e.type === 'final') meta = e.data;
     }
 
     return {
-      message: 'Affiliate research complete',
-      threadId,
+      message: meta.message,
+      threadId: meta.threadId,
       durationMs: Date.now() - startedAt,
       answer: answer.trim(),
-      toolsUsed: (finalMeta.toolsUsed as unknown) ?? [],
-      ...(verbose ? { events } : {}),
+      toolsUsed: meta.toolsUsed ?? [],
     };
   }
 
-  // Trigger the LangGraph domain research workflow
-  async startDomainResearch(
-    threadId: string,
-    domain: string,
-    prompt: string,
-    options?: { verbose?: boolean },
-  ) {
-    const startedAt = Date.now();
-    const verbose = options?.verbose ?? false;
-    const events: Array<Record<string, unknown>> = [];
-    let answer = '';
-    let finalMeta: Record<string, unknown> = {};
+  // =========================================================
+  // UTILS
+  // =========================================================
 
-    for await (const event of this.streamDomainResearch(
-      threadId,
-      domain,
-      prompt,
-      { tokenMode: 'chunk' },
-    )) {
-      if (event.type === 'token') {
-        answer += String(event.data.value ?? '');
-      } else if (event.type === 'final') {
-        finalMeta = event.data;
-      }
+  private log(threadId: string, msg: string) {
+    this.logger.log(`[${threadId}] ${msg}`);
+  }
 
-      if (verbose) {
-        events.push(event);
+  private extractChunk(chunk: unknown): string {
+    if (!chunk) return '';
+    if (typeof chunk === 'string') return chunk;
+
+    if (typeof chunk === 'object') {
+      const c = chunk as any;
+      if (typeof c.content === 'string') return c.content;
+      if (typeof c.text === 'string') return c.text;
+      if (Array.isArray(c.content)) {
+        return c.content.map((x: any) => x?.text || x?.content || '').join('');
       }
     }
+    return '';
+  }
 
-    const durationMs = Date.now() - startedAt;
-
-    return {
-      message: 'Research complete',
-      threadId,
-      durationMs,
-      answer: answer.trim(),
-      toolsUsed: (finalMeta.toolsUsed as unknown) ?? [],
-      ...(verbose ? { events } : {}),
-    };
+  private summarize(value: unknown, max = 300) {
+    if (!value) return '';
+    let text =
+      typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
+    return text.length > max ? text.slice(0, max) + '...' : text;
   }
 }

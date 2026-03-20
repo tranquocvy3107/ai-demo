@@ -48,7 +48,6 @@ export class AiController {
         threadId,
         domain,
         prompt,
-        { verbose: Boolean(verbose) },
       );
 
       return {
@@ -99,7 +98,6 @@ export class AiController {
       const result = await this.aiService.startAffiliateResearch(
         threadId,
         prompt,
-        { verbose: Boolean(verbose) },
       );
       return { ...result, threadId };
     } catch (e) {

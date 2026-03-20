@@ -249,8 +249,35 @@ export const webSearchDDGTool = tool(
   },
   {
     name: 'web_search',
-    description:
-      'DuckDuckGo search with domain filter, subdomain control, and flexible output',
+    description: `
+Search the web using DuckDuckGo and return a list of relevant results.
+
+Use this tool when you need to find a target website, domain, or URLs related to the user's query.
+
+Input:
+- query: string (required) — search keywords
+- numResults: number (optional, default: 10) — maximum number of results
+- mode: "url" | "domain" | "both" (optional, default: "both")
+- onlyUniqueDomain: boolean (optional) — return only one result per domain
+- includeSubdomain: boolean (optional) — include subdomains in domain extraction
+
+Output:
+- JSON object with:
+  - success: boolean
+  - query: string
+  - totalResults: number
+  - results: array of objects:
+    - title: string
+    - url: string (if mode = "url" or "both")
+    - domain: string (if mode = "domain" or "both")
+    - snippet: string
+
+Rules:
+- Always use this tool as the FIRST step to discover relevant websites
+- Prefer official websites over directories, aggregators, or ads
+- Avoid duplicate domains unless explicitly needed
+- Do NOT assume a domain without using this tool
+`,
     schema: z.object({
       query: z.string(),
       numResults: z.number().optional(),

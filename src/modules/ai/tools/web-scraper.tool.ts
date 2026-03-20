@@ -204,8 +204,43 @@ export const webScraperTool = tool(
   },
   {
     name: 'web_scraper',
-    description:
-      'Smart web scraper using SSR detection and Playwright fallback, cleaned HTML, link extraction, debug logs',
+    description: `
+Fetch and extract content from a webpage using a smart scraping strategy.
+
+Use this tool when you already have a URL and need to retrieve its content for analysis.
+
+Input:
+- url: string (required) — full URL of the webpage
+- extractLinks: boolean (optional, default: false) — whether to extract links from the page
+
+Output:
+- JSON object with:
+  - success: boolean
+  - url: string
+  - title: string (page title)
+  - metaDescription: string
+  - html: string (cleaned HTML content, truncated if too long)
+  - links: array (only if extractLinks = true), each:
+    - text: string (anchor text)
+    - href: string (absolute URL)
+    - domain: string
+  - meta:
+    - mode: "fetch" | "playwright" (how the page was retrieved)
+    - durationMs: number
+    - fallbackReason: string | null
+
+Behavior:
+- First attempts fast HTTP fetch
+- If content is missing or incomplete (no SSR), automatically falls back to Playwright
+- Removes scripts, styles, navigation, and other non-content elements
+- Normalizes and cleans HTML for easier parsing
+
+Rules:
+- Always use this tool AFTER discovering a valid URL (e.g. from web_search)
+- Do NOT attempt to extract structured data directly from raw HTML
+- Always pass the returned html to parse_html_structured before analysis
+- Use extractLinks = true when you need to discover pricing, affiliate, or navigation URLs
+`,
     schema: z.object({
       url: z.string(),
       extractLinks: z.boolean().optional(),
