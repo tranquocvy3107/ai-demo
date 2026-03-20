@@ -9,7 +9,7 @@ import {
   AIMessage,
 } from '@langchain/core/messages';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
-import { ChatOllama } from '@langchain/ollama';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { StructuredToolInterface } from '@langchain/core/tools';
 
 export const ResearchState = Annotation.Root({
@@ -30,15 +30,25 @@ export interface ResearchGraphOptions {
 }
 
 export function createResearchGraph(
-  llm: ChatOllama,
+  llm: BaseChatModel,
   options: ResearchGraphOptions,
 ) {
   const { tools } = options;
+  if (!llm.bindTools) {
+    throw new Error('LLM does not support tool binding. Please use a chat model that supports tools.');
+  }
   const llmWithTools = llm.bindTools(tools);
 
-  const callModel = async (state: typeof ResearchState.State) => {
+  const callModel = async (state: typeof ResearchState.State, config: any) => {
     const { messages } = state;
-    const response = await llmWithTools.invoke(messages);
+    const response = await llmWithTools.invoke(messages, config);
+    
+    // Force sequential tool execution by keeping only the first tool call
+    // The AI will think again after this tool finishes, making tool usage strictly sequential.
+    if (response.tool_calls && response.tool_calls.length > 1) {
+      response.tool_calls = [response.tool_calls[0]];
+    }
+    
     return { messages: [response] };
   };
 

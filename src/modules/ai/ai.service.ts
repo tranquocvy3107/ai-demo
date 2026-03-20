@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ChatOllama } from '@langchain/ollama';
+import { ChatOpenAI } from '@langchain/openai';
 import { createResearchGraph } from './workflows/research.graph';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { staticTools } from './tools';
@@ -25,7 +25,7 @@ export type ResearchEvent = {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private readonly llm: ChatOllama;
+  private readonly llm: ChatOpenAI;
 
   constructor(
     private readonly configService: ConfigService,
@@ -37,18 +37,20 @@ export class AiService {
     @InjectRepository(AgentMemory)
     private readonly agentMemoryRepo: Repository<AgentMemory>,
   ) {
-    this.llm = new ChatOllama({
-      baseUrl: this.configService.get<string>('ai.ollamaBaseUrl'),
-      model: 'qwen2.5:7b',
+    this.llm = new ChatOpenAI({
+      configuration: {
+        baseURL: this.configService.get<string>('ai.ollamaBaseUrl'),
+      },
+      modelName: this.configService.get<string>('ai.modelName'),
       temperature: 0,
-      numCtx: 32768, // Tăng context window lên 32k để xử lý được nhiều content web & RAG context mà không bị truncate
+      apiKey: 'ollama', // Placeholder for local server
     });
   }
 
   async generateResponse(prompt: string): Promise<string> {
     const response = await this.llm.invoke([new HumanMessage(prompt)]);
-    return typeof response.content === 'string' 
-      ? this.stripThinking(response.content) 
+    return typeof response.content === 'string'
+      ? this.stripThinking(response.content)
       : JSON.stringify(response.content);
   }
 
@@ -78,11 +80,11 @@ export class AiService {
     const researchApp = createResearchGraph(this.llm, { tools });
 
     // 3. Build System Prompt với RAG context và Memory (Summary) hiện tại
-    const systemPrompt = buildSystemPrompt({ 
-      domain, 
-      goal: prompt, 
+    const systemPrompt = buildSystemPrompt({
+      domain,
+      goal: prompt,
       ragContext,
-      previousMemory: memoryEntity.memory, 
+      previousMemory: memoryEntity.memory,
     });
 
     const initialState = {
@@ -132,13 +134,13 @@ export class AiService {
         const toolName = streamEvent.name;
         const output = streamEvent.data?.output;
         let parsedOutput = output;
-        try { if (typeof output === 'string' && output.startsWith('{')) parsedOutput = JSON.parse(output); } catch {}
-        
+        try { if (typeof output === 'string' && output.startsWith('{')) parsedOutput = JSON.parse(output); } catch { }
+
         yield {
           type: 'tool_end',
-          data: { 
-            tool: toolName, 
-            output: parsedOutput, 
+          data: {
+            tool: toolName,
+            output: parsedOutput,
             status: 'success',
             message: toolName === 'domain_traffic_semrush' ? (parsedOutput?.message || 'Traffic data saved.') : `Tool ${toolName} finished.`
           },
@@ -159,7 +161,7 @@ Mục tiêu tác vụ (Goal): ${prompt}
 Kết quả đầu ra của bạn: ${cleanAnswer}
 
 Hãy tóm tắt ngắn gọn trong 1-2 câu những gì bạn đã làm được ở bước này bằng tiếng Việt. CHỈ trả về phần tóm tắt, không giải thích gì thêm.`;
-        
+
         try {
           // Gọi nhanh LLM để tóm tắt kết quả
           const summaryRes = await this.llm.invoke([new HumanMessage(summarizePrompt)]);
@@ -167,7 +169,7 @@ Hãy tóm tắt ngắn gọn trong 1-2 câu những gì bạn đã làm được
           const finalSummary = this.stripThinking(summaryContent);
 
           // Thêm tóm tắt mới vào cuối mảng Memory
-          memoryEntity.memory.push(finalSummary);
+          memoryEntity.memory = [...(memoryEntity.memory || []), finalSummary];
           await this.agentMemoryRepo.save(memoryEntity);
           this.logger.log(`[Memory] Updated summary for threadId ${threadId}: ${finalSummary}`);
         } catch (err) {

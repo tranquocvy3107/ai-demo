@@ -34,7 +34,7 @@ services:
   # Note: Ollama doesn't run well entirely inside docker if you want to use GPU on standard Windows setups without WSL2 GPU passthrough.
   # But for a backend base, we provide this containerized CPU-only version, or you can run native it.
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.18.2
     container_name: ai_demo_ollama
     ports:
       - '11434:11434'
@@ -48,6 +48,7 @@ volumes:
   postgres_data:
   rabbitmq_data:
   ollama_data:
+
 
 networks:
   ai_net:

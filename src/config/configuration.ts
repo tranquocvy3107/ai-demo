@@ -17,5 +17,6 @@ export default () => ({
     openaiKey: process.env.OPENAI_API_KEY,
     anthropicKey: process.env.ANTHROPIC_API_KEY,
     ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+    modelName: process.env.AI_MODEL_NAME || 'qwen3.5:9b',
   },
 });

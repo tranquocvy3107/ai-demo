@@ -1,0 +1,315 @@
+event: status
+data: {"message":"Stream connected","threadId":"84e1202d-098b-4782-a369-c64b702b0264"}
+
+event: tool_start
+data: {"tool":"read_data","input":{"input":"{\"domain\":\"awin.com\"}"},"message":"Calling tool: read_data..."}
+
+event: tool_end
+data: {"tool":"read_data","output":{"lc":1,"type":"constructor","id":["langchain_core","messages","ToolMessage"],"kwargs":{"status":"success","content":"{\"found\":false,\"message\":\"No data found matching the query.\"}","tool_call_id":"83b9ec93-36c5-4d27-97c0-e540c3164ae0","name":"read_data","metadata":{"versions":{"@langchain/core":"1.1.32"}},"additional_kwargs":{},"response_metadata":{}}},"status":"success","message":"Tool read_data finished."}
+
+event: tool_start
+data: {"tool":"web_search","input":{"input":"{\"query\":\"awin.com affiliate program\"}"},"message":"Calling tool: web_search..."}
+
+event: tool_end
+data: {"tool":"web_search","output":{"lc":1,"type":"constructor","id":["langchain_core","messages","ToolMessage"],"kwargs":{"status":"success","content":"{\"query\":\"awin.com affiliate program\",\"source\":\"duckduckgo-lite\",\"totalResults\":4,\"results\":[{\"title\":\"Join our global affiliate platform | Awin\",\"url\":\"https://www.awin.com/\",\"snippet\":\"Affiliate marketing is a simple way to earn money online, using our affiliate platform. Join a global community of publishers and advertisers.\"},{\"title\":\"Become an affiliate for the world's largest brands | Awin\",\"url\":\"https://success.awin.com/s/signup-page?language=en_US\",\"snippet\":\"With Awin, you gain access to a vast network of affiliates and influencers who drive traffic and sales. You only pay for results—whether sales, leads, or clicks—while advanced tracking tools help optimize your campaigns.\"},{\"title\":\"Awin Affiliate Marketing - Complete Guide for Affiliates\",\"url\":\"https://www.affnext.com/blog/awin-affiliate-marketing-%E2%80%93-complete-guide-for-affiliates\",\"snippet\":\"Learn what Awin affiliate marketing is, how the Awin affiliate program works, commissions, benefits, and how affiliates earn with Awin.\"},{\"title\":\"Global Affiliate Marketing Platform | Affiliate Programs | Awin\",\"url\":\"https://www.awin.com/us/\",\"snippet\":\"Join Awin's global affiliate marketing platform. Launch tailored programs, connect with partners, and grow your business through performance marketing.\"}]}","tool_call_id":"47182336-932c-49a3-b178-814b9b25efe6","name":"web_search","metadata":{"versions":{"@langchain/core":"1.1.32"}},"additional_kwargs":{},"response_metadata":{}}},"status":"success","message":"Tool web_search finished."}
+
+event: tool_start
+data: {"tool":"web_scraper","input":{"input":"{\"url\":\"https://www.awin.com/\",\"extractLinks\":true}"},"message":"Calling tool: web_scraper..."}
+
+event: tool_end
+data: {"tool":"web_scraper","output":{"lc":1,"type":"constructor","id":["langchain_core","messages","ToolMessage"],"kwargs":{"status":"success","content":"{\"url\":\"https://www.awin.com/\",\"title\":\"Join our global affiliate platform  | Awin\",\"metaDescription\":\"Affiliate marketing is a simple way to earn money online, using our affiliate platform. Join a global community of publishers and advertisers.\",\"content\":\"Your growth, your way. Connect with 30K+ trusted brands and 1M+ approved partners who support your marketing goals and deliver results. Tell us who you are We build opportunities around your goals Pick your path and discover what we’ve built specifically for your business. Advertisers Turn partnerships into profit, whether you’re a new brand or scaling fast. Start growing Content creators & influencers Discover the brands you love and get paid for promoting them. Start earning Affiliate partners Monetize more effectively, whether you're a media, tech or other affiliate partner type. Start earning Agencies Accelerate your clients’ growth with tech that simplifies partner marketing. Start growing Trusted by 30K+ brands and 1M+ partners worldwide Adidas AliExpress AO\\nBooking.com Decathlon\\nEmma GE Appliances Groupon Lovehoney Lidl\\nL'Oreal Paris McGee & Co. MyProtein Nike Samsung Sephora SharkNinja\\nSixt Sky\\nTui Under Armour Uniqlo\\nViator Vodafone Sephora Why choose Awin The right connections change everythingConnect with trusted brands, creators, and strategic partners in our global ecosystem. Through the right partnerships, everyone wins bigger. £15B+ in revenue generated through Awin partnerships annually 30K+ trusted brands seeking quality partnerships 1M+ approved creators and affiliate partners globally 25+ years of premium partnership match-making Transform your affiliate strategy with industry-leading toolsOur tools help you build successful partnerships and optimize performance using advanced technology for sustained growth. Smart AI affiliate partner recommendations Advanced tracking and analytics Flexible reward structures Think global, boost local, succeed everywhereScale globally with confidence across 14 countries. Our local market insights make sure your campaigns perform at their peak, no matter where you expand. Retail, travel, and more Partnerships for every sectorSmart businesses across every industry rely on us for sustainable partnership growth. Read success stories Retail & Shopping Fashion Travel Finance & Insurance Telecom & Services Retail & Shopping Retail & Shopping Retailers across FMCG, fashion, beauty, and tech rely on our platform to reach new customers and accelerate sales.\\nFashion Fashion Trusted by global fashion leaders and fast-rising DTC brands, our partner network powers measurable growth across the industry.\\nTravel Travel From global airlines to niche tour operators, travel brands use our partner network to reach new travelers and increase bookings.\\nFinance & Insurance Finance & Insurance Helping the world's top financial brands reach new customers, build loyalty, and scale with confidence. Telecom & Services Telecom & Services Leading telecom and service providers grow subscribers and expand their reach through our performance-driven partnerships.\\nWhat our customers say Real stories. Real results.Discover how our customers transform their businesses through strategic partnerships. Samsung Increases Affiliate Marketing ROI by +67% with Awin Tools Learn how Awin’s built-in commission flexibility feature helped the electronics leader cut wasted spend and drive sales of specific products. Read full story Tactical On-Site Tech Partner Delivers +404% Revenue for SharkNinja Cart recovery, gamification elements, and dynamic promotions delivered the perfect response to rising competition and declining visitor engagement. Read full story Vodafone Gets 2,000 Extra Sales Per Month After Partnering with SaleCycle SMS and email retargeting help the telecom leader rescue carts and answer customer queries, leading to thousands of additional conversions. Read full story ThinkTank Americas 2026ThinkTank returns to the U.S. in 2026 - this time with a bold new regional focus. ThinkTank Americas marks the next evolution of Awin’s flagship event series, bringing together partners from across North and South America for 2.5 days of insight, innovation, and collaboration. Explore event\",\"links\":[{\"text\":\"Start growing\",\"href\":\"https://www.awin.com/advertisers\"},{\"text\":\"Start earning\",\"href\":\"https://www.awin.com/content-creator-influencer\"},{\"text\":\"Start earning\",\"href\":\"https://www.awin.com/editorial-media-sites\"},{\"text\":\"Start growing\",\"href\":\"https://www.awin.com/agency\"},{\"text\":\"Read success stories\",\"href\":\"https://www.awin.com/case-studies\"},{\"text\":\"Read full story\",\"href\":\"https://www.awin.com/gb/advertisers/case-studies/commission-flexibility-samsung-roi\"},{\"text\":\"Read full story\",\"href\":\"https://awin.com/gb/case-studies/sharkninja-cro-success\"},{\"text\":\"Read full story\",\"href\":\"https://awin.com/gb/advertisers/case-studies/vodafone-salecycle\"},{\"text\":\"Explore event\",\"href\":\"https://www.awin.com/us/events/thinktank-2026\"}]}","tool_call_id":"c0dfd500-80c5-40b9-8c42-11aa18c4afe1","name":"web_scraper","metadata":{"versions":{"@langchain/core":"1.1.32"}},"additional_kwargs":{},"response_metadata":{}}},"status":"success","message":"Tool web_scraper finished."}
+
+event: tool_start
+data: {"tool":"web_scraper","input":{"input":"{\"url\":\"https://success.awin.com/s/signup-page?language=en_US\"}"},"message":"Calling tool: web_scraper..."}
+
+event: tool_end
+data: {"tool":"web_scraper","output":{"lc":1,"type":"constructor","id":["langchain_core","messages","ToolMessage"],"kwargs":{"status":"success","content":"{\"url\":\"https://success.awin.com/s/signup-page?language=en_US\",\"title\":\"Awin Partner Success Center\",\"metaDescription\":\"\",\"content\":\"Loading×Sorry to interruptCSS ErrorRefresh\"}","tool_call_id":"72b37ab4-5332-4620-9e32-133f22c87da3","name":"web_scraper","metadata":{"versions":{"@langchain/core":"1.1.32"}},"additional_kwargs":{},"response_metadata":{}}},"status":"success","message":"Tool web_scraper finished."}
+
+event: tool_start
+data: {"tool":"web_scraper","input":{"input":"{\"extractLinks\":true,\"url\":\"https://www.awin.com/us/\"}"},"message":"Calling tool: web_scraper..."}
+
+event: tool_end
+data: {"tool":"web_scraper","output":{"lc":1,"type":"constructor","id":["langchain_core","messages","ToolMessage"],"kwargs":{"status":"success","content":"{\"url\":\"https://www.awin.com/us/\",\"title\":\"Global Affiliate Marketing Platform | Affiliate Programs  | Awin\",\"metaDescription\":\"Join Awin’s global affiliate marketing platform. Launch tailored programs, connect with partners, and grow your business through performance marketing.\",\"content\":\"Your growth, your way. Connect with 30K+ trusted brands and 1M+ approved partners who support your marketing goals and deliver results. Tell us who you are We build opportunities around your goals Pick your path and discover what we’ve built specifically for your business. Advertisers Turn partnerships into profit, whether you’re a new brand or scaling fast. Start growing Content creators & influencers Promote what you love and get paid through strategic partnerships. Start earning Affiliate partners Monetize more effectively, whether you're a media, tech or other affiliate partner type. Start earning Agencies Accelerate your clients’ growth with tech that simplifies partner marketing. Start growing Trusted by 30K+ brands and 1M+ partners worldwide Adidas AliExpress AO\\nBooking.com Decathlon\\nEmma Etsy\\nGE Appliances Groupon Lovehoney Lidl\\nL'Oreal Paris McGee & Co. MyProtein Nike Samsung Sephora SharkNinja\\nSixt Sky\\nTui Under Armour Uniqlo\\nViator Vodafone Why choose Awin The right connections change everythingConnect with trusted brands, creators, and strategic partners in our global ecosystem. Through the right partnerships, everyone wins bigger. $19B+ in revenue generated through Awin partnerships annually 30K+ trusted brands seeking quality partnerships 1M+ approved creators and affiliate partners globally 25+ years of premium partnership match-making Transform your affiliate strategy with industry-leading toolsOur tools help you build successful partnerships and optimize performance using advanced technology for sustained growth. Smart AI affiliate partner recommendations Advanced tracking and analytics Flexible reward structures Think global, boost local, succeed everywhereScale globally with confidence across 14 countries. Our local market insights make sure your campaigns perform at their peak, no matter where you expand. Retail, travel, and more Partnerships for every sectorSmart businesses across every industry rely on us for sustainable partnership growth. Read success stories Retail & Shopping Fashion Travel Finance & Insurance Telecom & Services Retail & Shopping Retailers across FMCG, fashion, beauty, and tech rely on our platform to reach new customers and accelerate sales.\\nFashion Trusted by global fashion leaders and fast-rising DTC brands, our partner network powers measurable growth across the industry.\\nTravel From global airlines to niche tour operators, travel brands use our partner network to reach new travelers and increase bookings.\\nFinance & Insurance Helping the world's top financial brands reach new customers, build loyalty, and scale with confidence. Telecom & Services Leading telecom and service providers grow subscribers and expand their reach through our performance-driven partnerships.\\nWhat our customers say Real stories. Real results.Discover how our customers transform their businesses through strategic partnerships. Samsung Increases Affiliate Marketing ROI by +67% with Awin Tools Learn how Awin’s built-in commission flexibility feature helped the electronics leader cut wasted spend and drive sales of specific products. Read full story\\nTactical On-Site Tech Partner Delivers +404% Revenue for SharkNinja Cart recovery, gamification elements, and dynamic promotions delivered the perfect response to rising competition and declining visitor engagement. Read full story Vodafone Gets 2,000 Extra Sales Per Month After Partnering with SaleCycle SMS and email retargeting help the telecom leader rescue carts and answer customer queries, leading to thousands of additional conversions. Read full story ThinkTank Americas 2026ThinkTank returns to the U.S. in 2026 - this time with a bold new regional focus. ThinkTank Americas marks the next evolution of Awin’s flagship event series, bringing together partners from across North and South America for 2.5 days of insight, innovation, and collaboration. Explore event\",\"links\":[{\"text\":\"Start growing\",\"href\":\"https://www.awin.com/us/advertisers\"},{\"text\":\"Start earning\",\"href\":\"https://www.awin.com/us/publishers/content-creator-influencer\"},{\"text\":\"Start earning\",\"href\":\"https://www.awin.com/us/publishers/editorial-media-sites\"},{\"text\":\"Start growing\",\"href\":\"https://www.awin.com/us/agency\"},{\"text\":\"Read success stories\",\"href\":\"https://www.awin.com/us/case-studies\"},{\"text\":\"Read full story\",\"href\":\"https://www.awin.com/us/advertisers/case-studies/samsung-reports-67-roi-from-tactical-use-of-commission-flexibility-tool\"},{\"text\":\"Read full story\",\"href\":\"https://www.awin.com/us/case-studies/sharkninja-cro-success\"},{\"text\":\"Read full story\",\"href\":\"https://www.awin.com/us/advertisers/case-studies/vodafone-salecycle\"},{\"text\":\"Explore event\",\"href\":\"https://www.awin.com/us/events/thinktank-2026\"}]}","tool_call_id":"1e0f69a9-5c0c-4292-b1a3-f5e5c5201554","name":"web_scraper","metadata":{"versions":{"@langchain/core":"1.1.32"}},"additional_kwargs":{},"response_metadata":{}}},"status":"success","message":"Tool web_scraper finished."}
+
+event: tool_start
+data: {"tool":"save_data","input":{"input":"{\"domain\":\"awin.com\",\"category\":\"affiliate_info\",\"key\":\"program_url\",\"value\":\"https://www.awin.com/\"}"},"message":"Calling tool: save_data..."}
+
+event: tool_end
+data: {"tool":"save_data","output":{"lc":1,"type":"constructor","id":["langchain_core","messages","ToolMessage"],"kwargs":{"status":"success","content":"{\"success\":true,\"action\":\"created\",\"id\":\"cd2dede2-f56e-497e-8b15-491cba5d481c\"}","tool_call_id":"460cdaee-db68-46f7-8a93-1b5bfeaff0b1","name":"save_data","metadata":{"versions":{"@langchain/core":"1.1.32"}},"additional_kwargs":{},"response_metadata":{}}},"status":"success","message":"Tool save_data finished."}
+
+event: tool_start
+data: {"tool":"save_data","input":{"input":"{\"key\":\"commission_rate\",\"value\":\"Varies by program and performance.\",\"category\":\"affiliate_info\",\"domain\":\"awin.com\"}"},"message":"Calling tool: save_data..."}
+
+event: tool_end
+data: {"tool":"save_data","output":{"lc":1,"type":"constructor","id":["langchain_core","messages","ToolMessage"],"kwargs":{"status":"success","content":"{\"success\":true,\"action\":\"created\",\"id\":\"8c03e6c4-a32d-4337-bd82-0c2ffb208ed0\"}","tool_call_id":"a671171f-d158-45f3-ba62-9218c2d3ceef","name":"save_data","metadata":{"versions":{"@langchain/core":"1.1.32"}},"additional_kwargs":{},"response_metadata":{}}},"status":"success","message":"Tool save_data finished."}
+
+event: tool_start
+data: {"tool":"save_data","input":{"input":"{\"category\":\"affiliate_info\",\"domain\":\"awin.com\",\"key\":\"details\",\"value\":\"Awin is a global affiliate marketing platform that connects advertisers with publishers, content creators, and agencies. It offers flexible reward structures and advanced tracking tools to optimize performance. Advertisers can turn partnerships into profit, while publishers earn through promoting trusted brands.\"}"},"message":"Calling tool: save_data..."}
+
+event: tool_end
+data: {"tool":"save_data","output":{"lc":1,"type":"constructor","id":["langchain_core","messages","ToolMessage"],"kwargs":{"status":"success","content":"{\"success\":true,\"action\":\"created\",\"id\":\"8b010c96-d9ea-4406-898f-9adb926943e1\"}","tool_call_id":"15a2fbd2-e4fa-47d7-be15-e43579beae97","name":"save_data","metadata":{"versions":{"@langchain/core":"1.1.32"}},"additional_kwargs":{},"response_metadata":{}}},"status":"success","message":"Tool save_data finished."}
+
+event: thought
+data: {"content":"FINAL"}
+
+event: thought
+data: {"content":" ANSW"}
+
+event: thought
+data: {"content":"ER"}
+
+event: thought
+data: {"content":":\n"}
+
+event: thought
+data: {"content":"{\n"}
+
+event: thought
+data: {"content":" "}
+
+event: thought
+data: {"content":" \""}
+
+event: thought
+data: {"content":"commission"}
+
+event: thought
+data: {"content":"_rate"}
+
+event: thought
+data: {"content":"\":"}
+
+event: thought
+data: {"content":" \""}
+
+event: thought
+data: {"content":"Var"}
+
+event: thought
+data: {"content":"ies"}
+
+event: thought
+data: {"content":" by"}
+
+event: thought
+data: {"content":" program"}
+
+event: thought
+data: {"content":" and"}
+
+event: thought
+data: {"content":" performance"}
+
+event: thought
+data: {"content":".\",\n"}
+
+event: thought
+data: {"content":" "}
+
+event: thought
+data: {"content":" \""}
+
+event: thought
+data: {"content":"program"}
+
+event: thought
+data: {"content":"_url"}
+
+event: thought
+data: {"content":"\":"}
+
+event: thought
+data: {"content":" \""}
+
+event: thought
+data: {"content":"https"}
+
+event: thought
+data: {"content":"://"}
+
+event: thought
+data: {"content":"www"}
+
+event: thought
+data: {"content":".aw"}
+
+event: thought
+data: {"content":"in"}
+
+event: thought
+data: {"content":".com"}
+
+event: thought
+data: {"content":"/\",\n"}
+
+event: thought
+data: {"content":" "}
+
+event: thought
+data: {"content":" \""}
+
+event: thought
+data: {"content":"details"}
+
+event: thought
+data: {"content":"\":"}
+
+event: thought
+data: {"content":" \""}
+
+event: thought
+data: {"content":"A"}
+
+event: thought
+data: {"content":"win"}
+
+event: thought
+data: {"content":" is"}
+
+event: thought
+data: {"content":" a"}
+
+event: thought
+data: {"content":" global"}
+
+event: thought
+data: {"content":" affiliate"}
+
+event: thought
+data: {"content":" marketing"}
+
+event: thought
+data: {"content":" platform"}
+
+event: thought
+data: {"content":" that"}
+
+event: thought
+data: {"content":" connects"}
+
+event: thought
+data: {"content":" advertisers"}
+
+event: thought
+data: {"content":" with"}
+
+event: thought
+data: {"content":" publishers"}
+
+event: thought
+data: {"content":","}
+
+event: thought
+data: {"content":" content"}
+
+event: thought
+data: {"content":" creators"}
+
+event: thought
+data: {"content":","}
+
+event: thought
+data: {"content":" and"}
+
+event: thought
+data: {"content":" agencies"}
+
+event: thought
+data: {"content":"."}
+
+event: thought
+data: {"content":" It"}
+
+event: thought
+data: {"content":" offers"}
+
+event: thought
+data: {"content":" flexible"}
+
+event: thought
+data: {"content":" reward"}
+
+event: thought
+data: {"content":" structures"}
+
+event: thought
+data: {"content":" and"}
+
+event: thought
+data: {"content":" advanced"}
+
+event: thought
+data: {"content":" tracking"}
+
+event: thought
+data: {"content":" tools"}
+
+event: thought
+data: {"content":" to"}
+
+event: thought
+data: {"content":" optimize"}
+
+event: thought
+data: {"content":" performance"}
+
+event: thought
+data: {"content":"."}
+
+event: thought
+data: {"content":" Ad"}
+
+event: thought
+data: {"content":"vertis"}
+
+event: thought
+data: {"content":"ers"}
+
+event: thought
+data: {"content":" can"}
+
+event: thought
+data: {"content":" turn"}
+
+event: thought
+data: {"content":" partnerships"}
+
+event: thought
+data: {"content":" into"}
+
+event: thought
+data: {"content":" profit"}
+
+event: thought
+data: {"content":","}
+
+event: thought
+data: {"content":" while"}
+
+event: thought
+data: {"content":" publishers"}
+
+event: thought
+data: {"content":" earn"}
+
+event: thought
+data: {"content":" through"}
+
+event: thought
+data: {"content":" promoting"}
+
+event: thought
+data: {"content":" trusted"}
+
+event: thought
+data: {"content":" brands"}
+
+event: thought
+data: {"content":".\"\n"}
+
+event: thought
+data: {"content":"}\n"}
+
+event: final_answer
+data: {"content":"FINAL ANSWER:\n{\n  \"commission_rate\": \"Varies by program and performance.\",\n  \"program_url\": \"https://www.awin.com/\",\n  \"details\": \"Awin is a global affiliate marketing platform that connects advertisers with publishers, content creators, and agencies. It offers flexible reward structures and advanced tracking tools to optimize performance. Advertisers can turn partnerships into profit, while publishers earn through promoting trusted brands.\"\n}","domain":"awin.com","threadId":"84e1202d-098b-4782-a369-c64b702b0264"}
+
