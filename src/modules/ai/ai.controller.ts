@@ -1,5 +1,6 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res, Get, Query } from '@nestjs/common';
 import { AiService } from './ai.service';
+import type { ThinkingMode } from './ai.service';
 import { v4 as uuidv4 } from 'uuid';
 import type { Request, Response } from 'express';
 
@@ -23,6 +24,9 @@ export class AiController {
     @Body('prompt') prompt: string,
     @Body('threadId') existingThreadId?: string,
     @Body('verbose') verbose?: boolean,
+    @Body('tokenMode') tokenMode?: 'char' | 'word',
+    @Body('thinkingMode') thinkingMode?: ThinkingMode,
+    @Body('enableMemorySummary') enableMemorySummary?: boolean,
   ) {
     if (!domain || !prompt) {
       return { error: 'Domain and prompt are required' };
@@ -38,7 +42,12 @@ export class AiController {
         threadId,
         domain,
         prompt,
-        { verbose: Boolean(verbose) },
+        {
+          verbose: Boolean(verbose),
+          tokenMode,
+          includeThinking: thinkingMode || 'auto',
+          enableMemorySummary,
+        },
       );
 
       return {
@@ -71,10 +80,22 @@ export class AiController {
     @Body('domain') domain: string,
     @Body('prompt') prompt: string,
     @Body('threadId') existingThreadId: string | undefined,
+    @Body('tokenMode') tokenMode: 'char' | 'word' | undefined,
+    @Body('thinkingMode') thinkingMode: ThinkingMode | undefined,
+    @Body('enableMemorySummary') enableMemorySummary: boolean | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.handleResearchStream(domain, prompt, existingThreadId, req, res);
+    await this.handleResearchStream(
+      domain,
+      prompt,
+      existingThreadId,
+      tokenMode,
+      thinkingMode,
+      enableMemorySummary,
+      req,
+      res,
+    );
   }
 
   @Get('research-domain/stream')
@@ -82,16 +103,33 @@ export class AiController {
     @Query('domain') domain: string,
     @Query('prompt') prompt: string,
     @Query('threadId') existingThreadId: string | undefined,
+    @Query('tokenMode') tokenMode: 'char' | 'word' | undefined,
+    @Query('thinkingMode') thinkingMode: ThinkingMode | undefined,
+    @Query('enableMemorySummary') enableMemorySummary: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.handleResearchStream(domain, prompt, existingThreadId, req, res);
+    const memoryFlag =
+      enableMemorySummary === undefined ? undefined : enableMemorySummary === 'true';
+    await this.handleResearchStream(
+      domain,
+      prompt,
+      existingThreadId,
+      tokenMode,
+      thinkingMode,
+      memoryFlag,
+      req,
+      res,
+    );
   }
 
   private async handleResearchStream(
     domain: string,
     prompt: string,
     existingThreadId: string | undefined,
+    tokenMode: 'char' | 'word' | undefined,
+    thinkingMode: ThinkingMode | undefined,
+    enableMemorySummary: boolean | undefined,
     req: Request,
     res: Response,
   ) {
@@ -127,7 +165,12 @@ export class AiController {
         threadId,
         domain,
         prompt,
-        { tokenMode: 'char', signal: abortController.signal },
+        {
+          tokenMode: tokenMode || 'word',
+          includeThinking: thinkingMode || 'auto',
+          enableMemorySummary,
+          signal: abortController.signal,
+        },
       )) {
         if (isClosed) break;
         writeEvent(event.type, event.data);

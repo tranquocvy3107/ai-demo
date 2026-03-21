@@ -42,13 +42,20 @@ export function createResearchGraph(
   const callModel = async (state: typeof ResearchState.State, config: any) => {
     const { messages } = state;
     const response = await llmWithTools.invoke(messages, config);
-    
-    // Force sequential tool execution by keeping only the first tool call
-    // The AI will think again after this tool finishes, making tool usage strictly sequential.
+
+    // Keep tool execution flexible for performance, but prevent duplicated scrapers in one turn.
     if (response.tool_calls && response.tool_calls.length > 1) {
-      response.tool_calls = [response.tool_calls[0]];
+      const filteredCalls = response.tool_calls.filter((call, index, list) => {
+        if (call.name !== 'web_scraper') {
+          return true;
+        }
+        return list.findIndex((item) => item.name === 'web_scraper') === index;
+      });
+
+      // Hard-limit tool calls in a single turn to avoid runaway latency.
+      response.tool_calls = filteredCalls.slice(0, 4);
     }
-    
+
     return { messages: [response] };
   };
 
