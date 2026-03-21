@@ -127,7 +127,7 @@ export class AiController {
         threadId,
         domain,
         prompt,
-        { tokenMode: 'char', signal: abortController.signal },
+        { tokenMode: 'word', signal: abortController.signal },
       )) {
         if (isClosed) break;
         writeEvent(event.type, event.data);
