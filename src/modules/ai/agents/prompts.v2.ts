@@ -150,18 +150,21 @@ Ranking priority:
 4. /partners
 5. others
 
-Then:
-- Pick the BEST candidat  e (do not scrape multiple pages unless needed)
-- Use **web_scraper**
-- Save scraped HTML to a file (filePath)
-- Pass filePath + URL to parse_html_from_file
 
-From markdown:
-- Extract pricing plans OR affiliate program details
+- Rules for scraping:
+  - ONLY scrape pages related to pricing or affiliate
+  - Do NOT scrape unrelated links
+  - Stop scraping once you have collected sufficient data for BOTH:
+    - pricing plans (if available)
+    - affiliate program details (if available)
+  - Maximum allowed scraping: 1–3 pages
+  - Save scraped HTML and parse with parse_html_from_file
+  - Extract pricing plans OR affiliate program details from parsed content
 
-If NO relevant link found:
-→ STOP and return exit response
-
+- CRITICAL:
+  - You MUST scrape at least one pricing or affiliate page before producing final JSON
+  - Data from landing page alone is NOT sufficient to populate affiliateProgram
+  - If no relevant link found or scraping fails → STOP and return exit response
 ---
 
 ### Step 6 — Validate Data (CRITICAL)

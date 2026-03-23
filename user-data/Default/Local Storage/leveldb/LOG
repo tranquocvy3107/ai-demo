@@ -1,5 +1,14 @@
-2026/03/23-15:41:43.763 894 Reusing MANIFEST E:\Current-waork\AI-RSM-Demo\ai-demo\user-data\Default\Local Storage\leveldb/MANIFEST-000001
-2026/03/23-15:41:43.767 894 Recovering log #20
-2026/03/23-15:41:43.768 894 Level-0 table #23: started
-2026/03/23-15:41:43.774 894 Level-0 table #23: 69555 bytes OK
-2026/03/23-15:41:43.777 894 Delete type=0 #20
+2026/03/23-17:07:47.614 2450 Reusing MANIFEST E:\Current-waork\AI-RSM-Demo\ai-demo\user-data\Default\Local Storage\leveldb/MANIFEST-000001
+2026/03/23-17:07:47.618 2450 Recovering log #30
+2026/03/23-17:07:47.619 2450 Level-0 table #32: started
+2026/03/23-17:07:47.625 2450 Level-0 table #32: 78050 bytes OK
+2026/03/23-17:07:47.627 2450 Delete type=0 #30
+2026/03/23-17:07:47.627 2ae0 Compacting 4@0 + 1@1 files
+2026/03/23-17:07:47.633 2ae0 Generated table #34@0: 24 keys, 38327 bytes
+2026/03/23-17:07:47.633 2ae0 Compacted 4@0 + 1@1 files => 38327 bytes
+2026/03/23-17:07:47.634 2ae0 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/03/23-17:07:47.634 2ae0 Delete type=2 #21
+2026/03/23-17:07:47.634 2ae0 Delete type=2 #23
+2026/03/23-17:07:47.634 2ae0 Delete type=2 #27
+2026/03/23-17:07:47.634 2ae0 Delete type=2 #29
+2026/03/23-17:07:47.634 2ae0 Delete type=2 #32
