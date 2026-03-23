@@ -2,7 +2,8 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
 import { chromium, Browser } from 'playwright';
-
+import * as fs from 'fs/promises';
+import * as path from 'path';
 // ===== CONFIG =====
 const MAX_CONTENT_LENGTH = 10000;
 const DEBUG = process.env.DEBUG === 'true';
@@ -27,7 +28,13 @@ async function getBrowser() {
   }
   return browser;
 }
+function getFileNameFromUrl(url: string) {
+  const u = new URL(url);
+  const domain = u.hostname.replace(/^www\./, '');
+  const safeDomain = domain.replace(/[^a-z0-9.-]/gi, '_');
 
+  return `${safeDomain}_${Date.now()}.html`;
+}
 // ===== SERVICE =====
 class SmartWebScraperService {
   // ===== FAST FETCH =====
@@ -198,10 +205,29 @@ export const webScraperTool = tool(
     log(`[FLOW] ► url="${url}" extractLinks=${!!extractLinks}`);
     try {
       const result = await scraper.scrape(url, extractLinks);
+
+      // ===== NEW: save HTML to file =====
+      const fileName = getFileNameFromUrl(url);
+      const dir = './tmp';
+      const filePath = path.join(dir, fileName);
+
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(filePath, result.html, 'utf-8');
+
       log(
-        `[FLOW] ✔ mode=${result.meta.mode} html_chars=${result.html.length} duration=${result.meta.durationMs}ms fallback=${result.meta.fallbackReason ?? 'none'}`,
+        `[FLOW] ✔ saved file=${fileName} mode=${result.meta.mode} html_chars=${result.html.length} duration=${result.meta.durationMs}ms`,
       );
-      return JSON.stringify(result);
+
+      // ===== RETURN FILE PATH INSTEAD OF RAW HTML =====
+      return JSON.stringify({
+        success: true,
+        url: result.url,
+        filePath, // 👈 thay html bằng filePath
+        title: result.title,
+        metaDescription: result.metaDescription,
+        ...(extractLinks ? { links: result.links } : {}),
+        meta: result.meta,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       log(`[FLOW] ✘ FAILED url="${url}" error="${msg}"`);
@@ -223,9 +249,9 @@ Output:
 - JSON object with:
   - success: boolean
   - url: string
+  - filePath: string (path to saved HTML file; raw HTML is NOT returned)
   - title: string (page title)
   - metaDescription: string
-  - html: string (cleaned HTML content, truncated if too long)
   - links: array (only if extractLinks = true), each:
     - text: string (anchor text)
     - href: string (absolute URL)
@@ -240,11 +266,12 @@ Behavior:
 - If content is missing or incomplete (no SSR), automatically falls back to Playwright
 - Removes scripts, styles, navigation, and other non-content elements
 - Normalizes and cleans HTML for easier parsing
+- Saves HTML to a local file instead of returning raw HTML
 
 Rules:
 - Always use this tool AFTER discovering a valid URL (e.g. from web_search)
 - Do NOT attempt to extract structured data directly from raw HTML
-- Always pass the returned html to parse_html_structured before analysis
+- Always pass filePath to parse_html_structured for analysis
 - Use extractLinks = true when you need to discover pricing, affiliate, or navigation URLs
 `,
     schema: z.object({

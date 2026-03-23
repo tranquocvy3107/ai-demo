@@ -9,9 +9,9 @@ import { HumanMessage } from '@langchain/core/messages';
 import { staticTools } from './tools';
 import { createSaveDataTool } from './tools/save-data.tool';
 import { createReadDataTool } from './tools/read-data.tool';
-import { webSearchDDGTool } from './tools/web-search-ddg.tool';
+import { webSearchGGTool } from './tools/web-search-gg.tool';
 import { webScraperTool } from './tools/web-scraper.tool';
-import { parseHtmlToStructuredTool } from './tools/html-to-rsm-json.tool';
+import { parseHtmlFromFileTool } from './tools/html-to-rsm-json.tool';
 import { ResearchData } from './entities/research-data.entity';
 import { RagService } from '../rag/rag.service';
 
@@ -49,7 +49,13 @@ export class AiService {
     const save = createSaveDataTool(this.researchDataRepo);
     const read = createReadDataTool(this.researchDataRepo);
     this.affiliateApp = createAffiliateGraph(this.llm, {
-      tools: [webSearchDDGTool, webScraperTool, parseHtmlToStructuredTool, save, read],
+      tools: [
+        webSearchGGTool,
+        webScraperTool,
+        parseHtmlFromFileTool,
+        save,
+        read,
+      ],
     });
 
     this.logger.log('AiService ready — affiliateApp compiled, LLM connected');
@@ -112,7 +118,9 @@ export class AiService {
     // [THINKING] markers that may span multiple chunks.
     let thinkingBuffer = '';
 
-    this.logger.log(`[${threadId}] ── ${label} START ─────────────────────────`);
+    this.logger.log(
+      `[${threadId}] ── ${label} START ─────────────────────────`,
+    );
 
     try {
       const stream = app.streamEvents(initialState, {
@@ -134,7 +142,11 @@ export class AiService {
           );
           yield {
             type: 'tool',
-            data: { phase: 'start', tool: name, input: this.summarize(e.data?.input) },
+            data: {
+              phase: 'start',
+              tool: name,
+              input: this.summarize(e.data?.input),
+            },
           };
           continue;
         }
@@ -144,7 +156,8 @@ export class AiService {
           const output = e.data?.output;
 
           try {
-            const parsed = typeof output === 'string' ? JSON.parse(output) : output;
+            const parsed =
+              typeof output === 'string' ? JSON.parse(output) : output;
             if (parsed?.success === false) {
               // Tool returned a soft failure — LLM sees this error and may retry or stop
               this.logger.warn(
@@ -159,7 +172,11 @@ export class AiService {
 
           yield {
             type: 'tool',
-            data: { phase: 'end', tool: e.name || 'unknown', output: this.summarize(output) },
+            data: {
+              phase: 'end',
+              tool: e.name || 'unknown',
+              output: this.summarize(output),
+            },
           };
           continue;
         }
@@ -204,7 +221,9 @@ export class AiService {
       // This handles the case where the stream ended without a closing [THINKING] marker.
       if (thinkingBuffer.trim()) {
         const formatted = this.formatThinking(thinkingBuffer.trim());
-        this.logger.debug(`[${threadId}] 🧠 THINKING (flushed):\n  ${formatted}`);
+        this.logger.debug(
+          `[${threadId}] 🧠 THINKING (flushed):\n  ${formatted}`,
+        );
         yield { type: 'thinking', data: { text: formatted } };
       }
 
@@ -214,7 +233,10 @@ export class AiService {
       const trueAnswer = answerParts[answerParts.length - 1].trim();
 
       const durationMs = Date.now() - startedAt;
-      const toolList = Object.entries(toolStats).map(([tool, count]) => ({ tool, count }));
+      const toolList = Object.entries(toolStats).map(([tool, count]) => ({
+        tool,
+        count,
+      }));
 
       this.logger.log(
         `[${threadId}] ── ${label} END   duration=${this.formatDuration(durationMs)}  tools=[${toolList.map((t) => `${t.tool}×${t.count}`).join(', ') || 'none'}]`,
@@ -223,27 +245,35 @@ export class AiService {
       // Read typed AffiliateResult that the finalize node stored in graph state
       let structuredResult: unknown = null;
       try {
-        const finalState = await app.getState({ configurable: { thread_id: threadId } });
+        const finalState = await app.getState({
+          configurable: { thread_id: threadId },
+        });
         structuredResult = finalState?.values?.result ?? null;
 
         if (structuredResult) {
-          this.logger.log(`[${threadId}] ✔  RESULT parsed  domain="${(structuredResult as any).domain}"  trustScore=${(structuredResult as any).overallTrustScore}`);
+          this.logger.log(
+            `[${threadId}] ✔  RESULT parsed  domain="${(structuredResult as any).domain}"  trustScore=${(structuredResult as any).overallTrustScore}`,
+          );
         } else {
-          this.logger.warn(`[${threadId}] ⚠  RESULT is null — LLM may not have produced valid JSON`);
+          this.logger.warn(
+            `[${threadId}] ⚠  RESULT is null — LLM may not have produced valid JSON`,
+          );
         }
       } catch {
-        this.logger.warn(`[${threadId}] ⚠  getState failed — structured result unavailable`);
+        this.logger.warn(
+          `[${threadId}] ⚠  getState failed — structured result unavailable`,
+        );
       }
 
       yield {
         type: 'final',
         data: {
-          message:   `${label} complete`,
+          message: `${label} complete`,
           threadId,
           durationMs,
           toolsUsed: toolList,
-          answer:    trueAnswer,
-          result:    structuredResult,
+          answer: trueAnswer,
+          result: structuredResult,
         },
       };
     } catch (err) {
@@ -251,7 +281,9 @@ export class AiService {
         this.logger.log(`[${threadId}] ── ${label} ABORTED by client`);
         return;
       }
-      this.logger.error(`[${threadId}] ── ${label} ERROR: ${(err as Error).message}`);
+      this.logger.error(
+        `[${threadId}] ── ${label} ERROR: ${(err as Error).message}`,
+      );
       yield { type: 'error', data: { message: (err as Error).message } };
     }
   }
@@ -265,12 +297,17 @@ export class AiService {
     prompt: string,
     options?: { tokenMode?: 'chunk' | 'char'; signal?: AbortSignal },
   ) {
-    this.logger.log(`[${threadId}] affiliateResearch  prompt="${prompt.slice(0, 80)}"`);
+    this.logger.log(
+      `[${threadId}] affiliateResearch  prompt="${prompt.slice(0, 80)}"`,
+    );
 
     const rag = await this.ragService.getActiveContext();
     this.logger.log(`[${threadId}] RAG loaded  chars=${rag.length}`);
 
-    yield { type: 'status', data: { message: 'RAG loaded', ragChars: rag.length } };
+    yield {
+      type: 'status',
+      data: { message: 'RAG loaded', ragChars: rag.length },
+    };
 
     yield* this.handleStream({
       threadId,
@@ -295,12 +332,17 @@ export class AiService {
     prompt: string,
     options?: { tokenMode?: 'chunk' | 'char'; signal?: AbortSignal },
   ) {
-    this.logger.log(`[${threadId}] domainResearch  domain="${domain}"  prompt="${prompt.slice(0, 80)}"`);
+    this.logger.log(
+      `[${threadId}] domainResearch  domain="${domain}"  prompt="${prompt.slice(0, 80)}"`,
+    );
 
     const rag = await this.ragService.getActiveContext();
     this.logger.log(`[${threadId}] RAG loaded  chars=${rag.length}`);
 
-    yield { type: 'status', data: { message: 'RAG loaded', ragChars: rag.length } };
+    yield {
+      type: 'status',
+      data: { message: 'RAG loaded', ragChars: rag.length },
+    };
 
     const app = this.getResearchApp();
 
@@ -330,9 +372,13 @@ export class AiService {
   }
 
   async startDomainResearch(threadId: string, domain: string, prompt: string) {
-    this.logger.log(`[${threadId}] startDomainResearch (blocking)  domain="${domain}"`);
+    this.logger.log(
+      `[${threadId}] startDomainResearch (blocking)  domain="${domain}"`,
+    );
     return this.collectStream(
-      this.streamDomainResearch(threadId, domain, prompt, { tokenMode: 'chunk' }),
+      this.streamDomainResearch(threadId, domain, prompt, {
+        tokenMode: 'chunk',
+      }),
     );
   }
 
@@ -347,12 +393,12 @@ export class AiService {
     }
 
     return {
-      message:    meta.message,
-      threadId:   meta.threadId,
+      message: meta.message,
+      threadId: meta.threadId,
       durationMs: meta.durationMs,
-      answer:     answer.trim(),
-      toolsUsed:  meta.toolsUsed ?? [],
-      result:     meta.result ?? null,  // typed AffiliateResult from finalize node
+      answer: answer.trim(),
+      toolsUsed: meta.toolsUsed ?? [],
+      result: meta.result ?? null, // typed AffiliateResult from finalize node
     };
   }
 
@@ -384,7 +430,8 @@ export class AiService {
 
   private summarize(value: unknown, max = 300) {
     if (!value) return '';
-    const text = typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
+    const text =
+      typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
     return text.length > max ? text.slice(0, max) + '...' : text;
   }
 }

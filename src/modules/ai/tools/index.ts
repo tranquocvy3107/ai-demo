@@ -5,14 +5,14 @@ export * from './save-data.tool';
 export * from './read-data.tool';
 export * from './html-to-rsm-json.tool';
 export * from './html-to-plaintext.tool';
-export * from './web-search-ddg.tool';
+export * from './web-search-gg.tool';
 
 import { httpRequestTool } from './http-request.tool';
 // import { webSearchTool } from './web-search.tool';
 import { webScraperTool } from './web-scraper.tool';
-import { parseHtmlToStructuredTool } from './html-to-rsm-json.tool';
+import { parseHtmlFromFileTool } from './html-to-rsm-json.tool';
 import { htmlToTextTool } from './html-to-plaintext.tool';
-import { webSearchDDGTool } from './web-search-ddg.tool';
+import { webSearchGGTool } from './web-search-gg.tool';
 
 /**
  * Static tools that don't require dependency injection.
@@ -20,9 +20,9 @@ import { webSearchDDGTool } from './web-search-ddg.tool';
  * via factory functions in ai.service.ts (they need a TypeORM repository).
  */
 export const staticTools = [
-  webSearchDDGTool,
+  webSearchGGTool,
   htmlToTextTool,
-  parseHtmlToStructuredTool,
+  parseHtmlFromFileTool,
   httpRequestTool,
   webScraperTool,
 ];

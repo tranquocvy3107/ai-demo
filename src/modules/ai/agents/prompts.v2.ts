@@ -32,7 +32,7 @@ const EXECUTION_RULES = `
 You MUST follow this exact tool order:
 1. web_search
 2. web_scraper
-3. parse_html_structured
+3. parse_html_from_file
 
 Rules:
 - Do NOT skip any step
@@ -80,8 +80,8 @@ Convert the selected result into a clean homepage URL:
 ### Step 3 — Scrape Homepage
 Use **web_scraper** on the homepage URL.
 
-- Extract the **html** field from the result
-- Pass html + url into **parse_html_structured** to get markdown content
+- Save the HTML content from web_scraper to a local file
+- Use **parse_html_from_file** with filePath + url to get Markdown content, links, and JSON-LD
 
 If scraping fails or returns empty:
 - Retry once
@@ -136,7 +136,7 @@ Rules:
 ---
 
 ### Step 5B — Landing: Find Pricing / Affiliate Page
-From parse_html_structured links:
+From parse_html_from_file links:
 
 Find candidate URLs matching:
 - /pricing, /plans
@@ -151,10 +151,10 @@ Ranking priority:
 5. others
 
 Then:
-- Pick the BEST candidate (do not scrape multiple pages unless needed)
+- Pick the BEST candidat  e (do not scrape multiple pages unless needed)
 - Use **web_scraper**
-- Extract html
-- Pass to **parse_html_structured**
+- Save scraped HTML to a file (filePath)
+- Pass filePath + URL to parse_html_from_file
 
 From markdown:
 - Extract pricing plans OR affiliate program details
@@ -215,6 +215,7 @@ Step: <step name>
 Action: <what you are doing>
 Reason: <why>
 Data: <source>
+Log: <optional — can be saved to reasoning log>
 
 CRITICAL RULES:
 - NEVER include THINKING in the final answer
