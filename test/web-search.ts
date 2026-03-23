@@ -1,4 +1,4 @@
-import { webSearchDDGTool } from '../src/modules/ai/tools/web-search-ddg.tool';
+import { webSearchDDGTool } from '../src/modules/ai/tools/web-search-gg.tool';
 
 async function run() {
   const result = await webSearchDDGTool.invoke({
