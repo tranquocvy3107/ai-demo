@@ -85,7 +85,7 @@ export class AiController {
   // ── Affiliate & Pricing Research (v2) ────────────────────────────────────
 
   @Post('affiliate-research')
-  @HttpCode(HttpStatus.ACCEPTED)
+  @HttpCode(HttpStatus.OK)
   async affiliateResearch(
     @Body('prompt') prompt: string,
     @Body('threadId') existingThreadId?: string,

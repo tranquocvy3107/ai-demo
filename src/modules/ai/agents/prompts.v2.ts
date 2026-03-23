@@ -3,11 +3,16 @@
  *
  * Tool list is generated dynamically from the tools passed in.
  * Adding/removing tools requires no changes here.
+ *
+ * Output shape is driven by AffiliateResult in affiliate-result.types.ts.
+ * If you add/remove fields from that interface, update OUTPUT_EXAMPLE below.
  */
 
 import { StructuredToolInterface } from '@langchain/core/tools';
+import type { AffiliateResult } from './affiliate-result.types';
 
-// ─── ROLE ────────────────────────────────────────────────────────────────
+// ─── ROLE ─────────────────────────────────────────────────────────────────────
+
 const AFFILIATE_ROLE = `
 You are an AI research agent that investigates websites to extract product pricing and affiliate program information.
 
@@ -18,6 +23,8 @@ CRITICAL:
 - Every value must come from scraped content
 - If data is missing → return null (DO NOT GUESS)
 `;
+
+// ─── EXECUTION RULES ──────────────────────────────────────────────────────────
 
 const EXECUTION_RULES = `
 ## Execution Rules (MANDATORY)
@@ -40,7 +47,8 @@ Data rules:
 - If uncertain → return null (DO NOT GUESS)
 `;
 
-// ─── WORKFLOW ────────────────────────────────────────────────────────────────
+// ─── WORKFLOW ─────────────────────────────────────────────────────────────────
+
 const WORKFLOW = `
 ## Workflow
 
@@ -192,7 +200,9 @@ Then return final JSON output.
 - Prefer high-signal pages (homepage, pricing page)
 - Stop early if task cannot be completed
 `;
-//---- REASONING
+
+// ─── REASONING ────────────────────────────────────────────────────────────────
+
 const REASONING = `
 ## Reasoning Protocol (MANDATORY)
 
@@ -211,7 +221,82 @@ CRITICAL RULES:
 - Final answer MUST be pure JSON only
 - If you include any text outside JSON → the answer is invalid
 `;
+
 // ─── OUTPUT FORMAT ────────────────────────────────────────────────────────────
+// OUTPUT_EXAMPLE mirrors AffiliateResult from affiliate-result.types.ts.
+// TypeScript will catch any field mismatch between the two.
+
+const OUTPUT_EXAMPLE: AffiliateResult = {
+  domain: 'example.com',
+  homepageUrl: 'https://example.com',
+  pageType: 'store',
+  productType: 'physical',
+  products: [
+    {
+      name: 'Product name',
+      price: '29.99',
+      currency: 'USD',
+      url: 'https://example.com/product/x',
+      trustScore: 90,
+      trustReason: 'Price and name found in product grid with clear markup',
+    },
+  ],
+  affiliateProgram: {
+    found: true,
+    signupUrl: 'https://example.com/affiliate',
+    commissionRate: '30%',
+    commissionType: 'recurring',
+    cookieDuration: '90 days',
+    payoutMethod: 'PayPal, bank transfer',
+    notes: 'Any extra relevant details',
+    trustScore: 85,
+    trustReason:
+      'Commission rate stated explicitly on dedicated affiliate page. Cookie duration inferred from FAQ section.',
+  },
+  decisionLog: [
+    {
+      step: 'classify',
+      decision: 'store',
+      reason:
+        'Homepage contains a product grid with 12 items, prices, and Add to Cart buttons',
+      sourceUrl: 'https://example.com',
+    },
+  ],
+  overallTrustScore: 87,
+  overallTrustReason:
+    'Data sourced directly from product grid and dedicated affiliate page. Commission type is inferred, not explicitly stated.',
+  exitReason: null,
+};
+
+const EXIT_EXAMPLE: AffiliateResult = {
+  domain: 'example.com',
+  homepageUrl: 'https://example.com',
+  pageType: 'unknown',
+  productType: 'unknown',
+  products: [],
+  affiliateProgram: {
+    found: false,
+    signupUrl: null,
+    commissionRate: null,
+    commissionType: null,
+    cookieDuration: null,
+    payoutMethod: null,
+    notes: null,
+    trustScore: 0,
+    trustReason: 'Research could not be completed',
+  },
+  decisionLog: [
+    {
+      step: 'classify',
+      decision: 'exit',
+      reason: 'Why the page could not be classified or no relevant URLs found',
+      sourceUrl: 'https://example.com',
+    },
+  ],
+  overallTrustScore: 0,
+  overallTrustReason: 'Research could not be completed',
+  exitReason: 'Reason why research stopped',
+};
 
 const OUTPUT_FORMAT = `
 ## Output Format
@@ -219,73 +304,12 @@ const OUTPUT_FORMAT = `
 Always return a single valid JSON object as your final response. No extra text outside the JSON.
 
 \`\`\`json
-{
-  "domain": "example.com",
-  "homepageUrl": "https://example.com",
-  "pageType": "store" | "landing" | "unknown",
-  "productType": "physical" | "digital" | "unknown",
-  "products": [
-    {
-      "name": "Product name",
-      "price": "29.99",
-      "currency": "USD",
-      "url": "https://example.com/product/x",
-      "trustScore": 90,
-      "trustReason": "Price and name found in product grid with clear markup"
-    }
-  ],
-  "affiliateProgram": {
-    "found": true,
-    "signupUrl": "https://example.com/affiliate",
-    "commissionRate": "30%",
-    "commissionType": "recurring" | "one-time" | "unknown",
-    "cookieDuration": "90 days",
-    "payoutMethod": "PayPal, bank transfer",
-    "notes": "Any extra relevant details",
-    "trustScore": 85,
-    "trustReason": "Commission rate stated explicitly on dedicated affiliate page. Cookie duration inferred from FAQ section."
-  },
-  "decisionLog": [
-    {
-      "step": "classify",
-      "decision": "store",
-      "reason": "Homepage contains a product grid with 12 items, prices, and Add to Cart buttons",
-      "sourceUrl": "https://example.com"
-    },
-    {
-      "step": "product_extraction",
-      "decision": "extracted 10 products",
-      "reason": "Products were clearly listed with name and price in structured markup",
-      "sourceUrl": "https://example.com"
-    }
-  ],
-  "overallTrustScore": 87,
-  "overallTrustReason": "Data sourced directly from product grid and dedicated affiliate page. Commission type is inferred, not explicitly stated.",
-  "exitReason": null
-}
+${JSON.stringify(OUTPUT_EXAMPLE, null, 2)}
 \`\`\`
 
 If stopping early (Scenario C or no pricing/affiliate page found), return:
 \`\`\`json
-{
-  "domain": "...",
-  "homepageUrl": "...",
-  "pageType": "unknown",
-  "productType": "unknown",
-  "products": [],
-  "affiliateProgram": { "found": false },
-  "decisionLog": [
-    {
-      "step": "classify",
-      "decision": "exit",
-      "reason": "Why the page could not be classified or no relevant URLs found",
-      "sourceUrl": "https://example.com"
-    }
-  ],
-  "overallTrustScore": 0,
-  "overallTrustReason": "Research could not be completed",
-  "exitReason": "Reason why research stopped"
-}
+${JSON.stringify(EXIT_EXAMPLE, null, 2)}
 \`\`\`
 
 ## Trust Score Rules
@@ -310,9 +334,10 @@ trustReason must explain:
 - Set any unknown field to null, not empty string
 - \`affiliateProgram\` is always present even if not found (set found: false)
 - \`decisionLog\` must have one entry per major decision made (classify, navigate, extract, exit)
-- \`overallTrustScore\` is the average of all field-level trust scores, rounded to integer`;
+- \`overallTrustScore\` is the average of all field-level trust scores, rounded to integer
+`;
 
-// ─── BUILDER ─────────────────────────────────────────────────────────────────
+// ─── TOOL SECTION ─────────────────────────────────────────────────────────────
 
 function buildToolSection(tools: StructuredToolInterface[]): string {
   const lines = tools.map(
@@ -320,6 +345,8 @@ function buildToolSection(tools: StructuredToolInterface[]): string {
   );
   return `## Available Tools\n\n${lines.join('\n')}`;
 }
+
+// ─── BUILDER ──────────────────────────────────────────────────────────────────
 
 export interface AffiliatePromptParams {
   goal: string;
@@ -330,26 +357,20 @@ export interface AffiliatePromptParams {
 export function buildAffiliatePrompt(params: AffiliatePromptParams): string {
   const { goal, tools, ragContext } = params;
 
-  let prompt = `
-${AFFILIATE_ROLE}
+  const parts = [
+    AFFILIATE_ROLE,
+    buildToolSection(tools),
+    EXECUTION_RULES,
+    REASONING,
+    WORKFLOW,
+    OUTPUT_FORMAT,
+  ];
 
-${buildToolSection(tools)}
-
-${EXECUTION_RULES}
-
-${REASONING}
-
-${WORKFLOW}
-
-${OUTPUT_FORMAT}
-
-  `;
-
-  if (ragContext && ragContext.trim().length > 0) {
-    prompt += `\n\n## Knowledge Base & Guidelines\n\n${ragContext}`;
+  if (ragContext?.trim()) {
+    parts.push(`## Knowledge Base & Guidelines\n\n${ragContext}`);
   }
 
-  prompt += `\n\n## Current Task\n\n${goal}`;
+  parts.push(`## Current Task\n\n${goal}`);
 
-  return prompt;
+  return parts.join('\n\n');
 }

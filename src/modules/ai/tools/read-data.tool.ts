@@ -3,6 +3,11 @@ import { Repository } from 'typeorm';
 import { z } from 'zod';
 import { ResearchData } from '../entities/research-data.entity';
 
+const DEBUG = process.env.DEBUG === 'true';
+function log(...args: any[]) {
+  if (DEBUG) console.log('[ReadData]', ...args);
+}
+
 /**
  * Factory function: creates read_data tool with injected repository.
  * Call this from ai.service.ts after getting the repository.
@@ -11,9 +16,7 @@ export function createReadDataTool(repository: Repository<ResearchData>) {
   return tool(
     async ({ domain, category, key }) => {
       try {
-        console.log(
-          `[ReadData] Querying: domain=${domain || '*'}, category=${category || '*'}, key=${key || '*'}`,
-        );
+        log(`[FLOW] ► querying domain=${domain || '*'} category=${category || '*'} key=${key || '*'}`);
 
         const queryBuilder = repository.createQueryBuilder('rd');
 
@@ -30,6 +33,7 @@ export function createReadDataTool(repository: Repository<ResearchData>) {
         queryBuilder.orderBy('rd.updatedAt', 'DESC').take(20);
 
         const results = await queryBuilder.getMany();
+        log(`[FLOW] ✔ found=${results.length} records`);
 
         if (results.length === 0) {
           return JSON.stringify({

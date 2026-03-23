@@ -6,6 +6,11 @@ import type { AnyNode, Element } from 'domhandler';
 // Max markdown length before truncation
 const MAX_MARKDOWN_LENGTH = 12000;
 const MAX_LINKS = 80;
+
+const DEBUG = process.env.DEBUG === 'true';
+function log(...args: any[]) {
+  if (DEBUG) console.log('[ParseHtml]', ...args);
+}
 const description = `
 Convert raw HTML into structured, readable Markdown for analysis.
 
@@ -248,14 +253,17 @@ function parseHtml(html: string, baseUrl: string) {
 // ===== TOOL =====
 export const parseHtmlToStructuredTool = tool(
   ({ html, url }) => {
+    log(`[FLOW] ► url="${url}" html_chars=${html.length}`);
     try {
       const data = parseHtml(html, url);
+      log(
+        `[FLOW] ✔ markdown_chars=${data.markdown.length} links=${data.links.length} jsonLd=${data.jsonLd.length} truncated=${data.truncated}`,
+      );
       return JSON.stringify({ success: true, url, ...data });
     } catch (err) {
-      return JSON.stringify({
-        success: false,
-        message: err instanceof Error ? err.message : 'Parse error',
-      });
+      const msg = err instanceof Error ? err.message : 'Parse error';
+      log(`[FLOW] ✘ FAILED url="${url}" error="${msg}"`);
+      return JSON.stringify({ success: false, message: msg });
     }
   },
   {

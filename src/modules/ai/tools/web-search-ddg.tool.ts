@@ -224,12 +224,15 @@ async function searchDuckDuckGo(
 export const webSearchDDGTool = tool(
   async ({ query, numResults, mode, onlyUniqueDomain, includeSubdomain }) => {
     const limit = numResults || MAX_RESULTS;
+    log(`[FLOW] ► query="${query}" limit=${limit}`);
 
     try {
       const results = await searchDuckDuckGo(query, limit, {
         onlyUniqueDomain,
         includeSubdomain,
       });
+
+      log(`[FLOW] ✔ found=${results.length} results`);
 
       return JSON.stringify({
         success: true,
@@ -238,13 +241,10 @@ export const webSearchDDGTool = tool(
         results: formatResults(results, mode || 'both'),
       });
     } catch (err) {
-      log('Tool error:', err);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      log(`[FLOW] ✘ FAILED query="${query}" error="${msg}"`);
 
-      return JSON.stringify({
-        success: false,
-        error: true,
-        message: err instanceof Error ? err.message : 'Unknown error',
-      });
+      return JSON.stringify({ success: false, error: true, message: msg });
     }
   },
   {

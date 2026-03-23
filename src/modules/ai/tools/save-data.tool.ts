@@ -3,6 +3,11 @@ import { z } from 'zod';
 import { Repository } from 'typeorm';
 import { ResearchData } from '../entities/research-data.entity';
 
+const DEBUG = process.env.DEBUG === 'true';
+function log(...args: any[]) {
+  if (DEBUG) console.log('[SaveData]', ...args);
+}
+
 /**
  * Factory function: creates save_data tool with injected repository.
  * Call this from ai.service.ts after getting the repository.
@@ -11,7 +16,7 @@ export function createSaveDataTool(repository: Repository<ResearchData>) {
   return tool(
     async ({ domain, category, key, value }) => {
       try {
-        console.log(`[SaveData] Saving: ${domain}/${category}/${key}`);
+        log(`[FLOW] ► saving ${domain}/${category}/${key}`);
 
         // Upsert: update if same domain+category+key exists
         const existing = await repository.findOne({
@@ -28,6 +33,7 @@ export function createSaveDataTool(repository: Repository<ResearchData>) {
         if (existing) {
           existing.value = valueToSave;
           await repository.save(existing);
+          log(`[FLOW] ✔ updated id=${existing.id}`);
           return JSON.stringify({
             success: true,
             action: 'updated',
@@ -42,6 +48,7 @@ export function createSaveDataTool(repository: Repository<ResearchData>) {
           value: valueToSave,
         });
         const saved = await repository.save(entity);
+        log(`[FLOW] ✔ created id=${saved.id}`);
 
         return JSON.stringify({
           success: true,

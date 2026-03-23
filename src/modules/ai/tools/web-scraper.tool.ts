@@ -16,6 +16,11 @@ function log(...args: any[]) {
 let browser: Browser | null = null;
 
 async function getBrowser() {
+  // Fix #6: reset dead browser instance before reusing
+  if (browser && !browser.isConnected()) {
+    log('Browser disconnected — relaunching');
+    browser = null;
+  }
   if (!browser) {
     log('Launching browser...');
     browser = await chromium.launch({ headless: true });
@@ -190,16 +195,17 @@ const scraper = new SmartWebScraperService();
 // ===== TOOL =====
 export const webScraperTool = tool(
   async ({ url, extractLinks }) => {
+    log(`[FLOW] ► url="${url}" extractLinks=${!!extractLinks}`);
     try {
       const result = await scraper.scrape(url, extractLinks);
+      log(
+        `[FLOW] ✔ mode=${result.meta.mode} html_chars=${result.html.length} duration=${result.meta.durationMs}ms fallback=${result.meta.fallbackReason ?? 'none'}`,
+      );
       return JSON.stringify(result);
     } catch (err) {
-      log('ERROR:', err);
-      return JSON.stringify({
-        success: false,
-        error: true,
-        message: err instanceof Error ? err.message : 'Unknown error',
-      });
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      log(`[FLOW] ✘ FAILED url="${url}" error="${msg}"`);
+      return JSON.stringify({ success: false, error: true, message: msg });
     }
   },
   {
