@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { DatabaseModule } from './database';
 import { AiModule } from './modules/ai';
 import { RagModule } from './modules/rag';
+import { DomainModule } from './modules/domain/domain.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -16,6 +17,7 @@ import configuration from './config/configuration';
     DatabaseModule,
     AiModule,
     RagModule,
+    DomainModule,
   ],
   controllers: [AppController],
   providers: [AppService],

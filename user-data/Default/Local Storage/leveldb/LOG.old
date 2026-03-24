@@ -1,3 +1,6 @@
-2026/03/23-17:07:03.362 5d68 Reusing MANIFEST E:\Current-waork\AI-RSM-Demo\ai-demo\user-data\Default\Local Storage\leveldb/MANIFEST-000001
-2026/03/23-17:07:03.368 5d68 Recovering log #30
-2026/03/23-17:07:03.369 5d68 Reusing old log E:\Current-waork\AI-RSM-Demo\ai-demo\user-data\Default\Local Storage\leveldb/000030.log 
+2026/03/24-17:07:40.377 58dc Reusing MANIFEST E:\Current-waork\AI-RSM-Demo\ai-demo\user-data\Default\Local Storage\leveldb/MANIFEST-000001
+2026/03/24-17:07:40.381 58dc Recovering log #49
+2026/03/24-17:07:40.382 58dc Reusing old log E:\Current-waork\AI-RSM-Demo\ai-demo\user-data\Default\Local Storage\leveldb/000049.log 
+2026/03/24-17:07:58.164 58dc Level-0 table #53: started
+2026/03/24-17:07:58.184 58dc Level-0 table #53: 40763 bytes OK
+2026/03/24-17:07:58.192 58dc Delete type=0 #49

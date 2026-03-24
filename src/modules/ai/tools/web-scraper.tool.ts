@@ -7,7 +7,23 @@ import * as path from 'path';
 // ===== CONFIG =====
 const MAX_CONTENT_LENGTH = 10000;
 const DEBUG = process.env.DEBUG === 'true';
-
+const BLOCKED_PATTERNS = [
+  '/blog',
+  '/docs',
+  '/help',
+  '/guide',
+  '/news',
+  '/article',
+  '/post',
+  '/academy',
+  '/learn',
+  '/privacy',
+  '/terms',
+];
+function isBlockedUrl(url: string) {
+  const u = url.toLowerCase();
+  return BLOCKED_PATTERNS.some((p) => u.includes(p));
+}
 // ===== LOGGER =====
 function log(...args: any[]) {
   if (DEBUG) console.log('[WebScraper]', ...args);
@@ -175,10 +191,20 @@ class SmartWebScraperService {
       });
 
       const seen = new Set<string>();
+      links = links.filter((l) => !seen.has(l.href) && seen.add(l.href));
+
+      const baseDomain = new URL(url).hostname.replace(/^www\./, '');
+
       links = links
-        .filter((l) => !seen.has(l.href) && seen.add(l.href))
-        .slice(0, 50);
-      log('Links extracted:', links.length);
+        // chỉ giữ cùng domain
+        .filter((l) => l.domain === baseDomain)
+
+        // chỉ loại rác rõ ràng
+        .filter((l) => !isBlockedUrl(l.href));
+
+      // .slice(0, 10); // giữ nhiều hơn để AI chọn
+
+      log('Links after soft filter:', links.length);
     }
 
     const duration = Date.now() - start;

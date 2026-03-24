@@ -36,15 +36,23 @@ export class AiService {
     private ragService: RagService,
   ) {
     const baseUrl = this.configService.get<string>('ai.ollamaBaseUrl');
+    const start = Date.now();
 
-    // numCtx 32768: system prompt alone is ~3500 chars; 8000 overflows by turn 2
-    this.llm = new ChatOllama({
-      baseUrl,
-      model: 'qwen2.5:7b',
-      temperature: 0,
-      numCtx: 32768,
-    });
-
+    try {
+      console.log('🚀 BEFORE LLM');
+      // numCtx 32768: system prompt alone is ~3500 chars; 8000 overflows by turn 2
+      this.llm = new ChatOllama({
+        baseUrl,
+        model: 'qwen2.5:7b',
+        temperature: 0,
+        numCtx: 32768,
+        keepAlive: '10s',
+      });
+      console.log('✅   AFTER LLM', Date.now() - start);
+    } catch (err) {
+      console.error('❌ LLM ERROR AFTER', Date.now() - start);
+      throw err;
+    }
     // Build affiliate graph once — reuse across all requests
     const save = createSaveDataTool(this.researchDataRepo);
     const read = createReadDataTool(this.researchDataRepo);
@@ -302,7 +310,6 @@ export class AiService {
     );
 
     const rag = await this.ragService.getActiveContext();
-    this.logger.log(`[${threadId}] RAG loaded  chars=${rag.length}`);
 
     yield {
       type: 'status',

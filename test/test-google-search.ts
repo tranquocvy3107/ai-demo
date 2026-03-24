@@ -33,4 +33,4 @@ async function runTest() {
 runTest();
 
 // giữ process sống để browser không auto đóng
-// setInterval(() => {}, 1000);
+setInterval(() => {}, 1000);

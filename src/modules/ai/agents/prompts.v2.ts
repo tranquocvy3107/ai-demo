@@ -133,40 +133,52 @@ Rules:
   - or link clearly leads to product detail
 - Max 1–2 extra page visits
 
----
 
 ### Step 5B — Landing: Find Pricing / Affiliate Page
 From parse_html_from_file links:
 
-Find candidate URLs matching:
-- /pricing, /plans
-- /affiliate, /partners, /referral
-- keywords: pricing, plans, affiliate, earn, commission
+Find candidate URLs semantically related to pricing, plans, or affiliate info.
+Do NOT rely on fixed keywords.
 
-Ranking priority:
-1. /pricing
-2. /plans
-3. /affiliate
-4. /partners
-5. others
+AI may consider:
+- Anchor text meaning (e.g., “Pricing”, “Plans”, “Earn”, “Commission”, “Bang Gia”, “Chuong Trinh Doi Tac”)
+- URL structure and context (e.g., /pricing, /plans, /affiliate, /partners, /referral)
+- Page content hints (hero section, CTA buttons, pricing tables)
 
+Ranking priority (suggested, but AI can adapt semantically):
+1. /pricing or equivalents
+2. /plans or equivalents
+3. /affiliate or equivalents
+4. /partners or equivalents
+5. Other high-relevance URLs
 
-- Rules for scraping:
-  - ONLY scrape pages related to pricing or affiliate
-  - Do NOT scrape unrelated links
-  - Stop scraping once you have collected sufficient data for BOTH:
-    - pricing plans (if available)
-    - affiliate program details (if available)
-  - Maximum allowed scraping: 1–3 pages
-  - Save scraped HTML and parse with parse_html_from_file
-  - Extract pricing plans OR affiliate program details from parsed content
+BLOCKED URLs (NEVER VISIT):
+- /blog
+- /docs
+- /help
+- /guide
+- /news
+- /article
+- /post
+- /academy
+- /learn
 
-- CRITICAL:
-  - You MUST scrape at least one pricing or affiliate page before producing final JSON
-  - Data from landing page alone is NOT sufficient to populate affiliateProgram
-  - If no relevant link found or scraping fails → STOP and return exit response
----
+If a URL matches any BLOCKED pattern → SKIP immediately
 
+Rules for scraping:
+- ONLY scrape pages relevant to pricing or affiliate
+- Do NOT scrape unrelated links
+- Stop scraping once sufficient data for BOTH:
+  - pricing plans (if available)
+  - affiliate program details (if available)
+- Maximum allowed scraping: 1–5 pages
+- Save scraped HTML and parse with parse_html_from_file
+- Extract pricing plans OR affiliate program details from parsed content
+
+CRITICAL:
+- AI MUST scrape at least one pricing or affiliate page before producing final JSON
+- Data from landing page alone is NOT sufficient to populate affiliateProgram
+- If no relevant link found or scraping fails → STOP and return exit response
 ### Step 6 — Validate Data (CRITICAL)
 Before saving:
 
